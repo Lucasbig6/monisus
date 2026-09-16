@@ -20,3 +20,8 @@ build/
 # IDE
 .vscode/
 .idea/
+
+# Banco de dados 
+test.db
+
+API_SUPERSET.md

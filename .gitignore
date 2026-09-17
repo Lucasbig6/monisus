@@ -2,6 +2,9 @@
 superset/db_home/
 superset/.env
 
+# Backend
+backend/.env
+
 # Python
 __pycache__/
 *.py[cod]

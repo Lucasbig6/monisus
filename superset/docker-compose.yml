@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:15
+    container_name: superset_db
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset_password
+    volumes:
+      - db_home:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: superset_cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset_app
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "chave_secreta_monisus_ambiente_dev_123"
+      PYTHONPATH: "/app/pythonpath"
+      REDIS_URL: "redis://redis:6379/0"
+    volumes:
+      - ./superset_config.py:/app/pythonpath/superset_config.py
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+  init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset_init
+    environment:
+      SUPERSET_SECRET_KEY: "chave_secreta_monisus_ambiente_dev_123"
+      PYTHONPATH: "/app/pythonpath"
+    volumes:
+      - ./superset_config.py:/app/pythonpath/superset_config.py
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: /app/docker/docker-init.sh
+
+volumes:
+  db_home:

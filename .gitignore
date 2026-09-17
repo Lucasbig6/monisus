@@ -1,27 +1,31 @@
-# Dados
-test.db
-uploads/*
-!.gitkeep
-
-# Ambiente
-.env
+# Docker
+superset/db_home/
+superset/.env
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.egg-info/
 dist/
 build/
+.eggs/
+*.egg
 
-# Docker
-*.log
+# Virtual environments
+.venv/
+venv/
+env/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Banco de dados 
-test.db
+# OS
+.DS_Store
+Thumbs.db
 
-API_SUPERSET.md
+# Logs
+*.log

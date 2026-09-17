@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -11,13 +12,15 @@ from app.auth import routes as auth_routes
 from app.core.config import settings
 from app.superset.client import superset_client
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await superset_client.login()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Superset indisponível no startup: %s", exc)
     yield
     await superset_client.close()
 
@@ -34,7 +37,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth_routes.router, prefix=settings.api_prefix)
@@ -52,3 +55,11 @@ async def root() -> dict[str, str]:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/superset")
+async def health_superset() -> dict[str, str]:
+    healthy = await superset_client.check_health()
+    if healthy:
+        return {"status": "ok", "superset": "connected"}
+    return {"status": "degraded", "superset": "unavailable"}

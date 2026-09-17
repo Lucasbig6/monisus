@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.auth.dependencies import get_current_token
 from app.superset import charts as superset_charts
 
 router = APIRouter(prefix="/charts", tags=["Charts"])
@@ -13,12 +14,16 @@ router = APIRouter(prefix="/charts", tags=["Charts"])
 async def list_charts(
     page: int = Query(0, ge=0),
     page_size: int = Query(50, ge=1, le=200),
+    token: str = Depends(get_current_token),
 ) -> dict[str, Any]:
     return await superset_charts.list_charts(page=page, page_size=page_size)
 
 
 @router.get("/{chart_id}")
-async def get_chart(chart_id: int | str) -> dict[str, Any]:
+async def get_chart(
+    chart_id: int | str,
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
     try:
         return await superset_charts.get_chart(chart_id)
     except Exception as e:
@@ -26,12 +31,19 @@ async def get_chart(chart_id: int | str) -> dict[str, Any]:
 
 
 @router.post("", status_code=201)
-async def create_chart(data: dict[str, Any]) -> dict[str, Any]:
+async def create_chart(
+    data: dict[str, Any],
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
     return await superset_charts.create_chart(data)
 
 
 @router.put("/{chart_id}")
-async def update_chart(chart_id: int, data: dict[str, Any]) -> dict[str, Any]:
+async def update_chart(
+    chart_id: int,
+    data: dict[str, Any],
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
     try:
         return await superset_charts.update_chart(chart_id, data)
     except Exception as e:
@@ -39,7 +51,10 @@ async def update_chart(chart_id: int, data: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.delete("/{chart_id}", status_code=204)
-async def delete_chart(chart_id: int) -> None:
+async def delete_chart(
+    chart_id: int,
+    token: str = Depends(get_current_token),
+) -> None:
     try:
         await superset_charts.delete_chart(chart_id)
     except Exception as e:
@@ -47,7 +62,10 @@ async def delete_chart(chart_id: int) -> None:
 
 
 @router.get("/{chart_id}/data")
-async def get_chart_data(chart_id: int) -> dict[str, Any]:
+async def get_chart_data(
+    chart_id: int,
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
     try:
         return await superset_charts.get_chart_data(chart_id)
     except Exception as e:
@@ -55,5 +73,8 @@ async def get_chart_data(chart_id: int) -> dict[str, Any]:
 
 
 @router.post("/data")
-async def post_chart_data(data: dict[str, Any]) -> dict[str, Any]:
+async def post_chart_data(
+    data: dict[str, Any],
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
     return await superset_charts.post_chart_data(data)

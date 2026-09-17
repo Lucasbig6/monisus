@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth.dependencies import get_current_token
 from app.superset import auth as superset_auth
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -22,8 +24,22 @@ async def login(request: LoginRequest) -> dict[str, Any]:
             username=request.username,
             password=request.password,
         )
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Credenciais inválidas: {e}")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=401, detail="Credenciais inválidas"
+            ) from exc
+        raise HTTPException(
+            status_code=502, detail="Erro ao comunicar com o serviço de autenticação"
+        ) from exc
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503, detail="Serviço de autenticação indisponível"
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=502, detail="Erro interno na autenticação"
+        ) from None
 
 
 class RefreshRequest(BaseModel):
@@ -34,13 +50,41 @@ class RefreshRequest(BaseModel):
 async def refresh(request: RefreshRequest) -> dict[str, Any]:
     try:
         return await superset_auth.refresh_token(refresh_token=request.refresh_token)
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Erro ao renovar token: {e}")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=401, detail="Token de refresh inválido ou expirado"
+            ) from exc
+        raise HTTPException(
+            status_code=502, detail="Erro ao comunicar com o serviço de autenticação"
+        ) from exc
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503, detail="Serviço de autenticação indisponível"
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=502, detail="Erro interno na renovação do token"
+        ) from None
 
 
 @router.get("/me")
-async def get_me(token: str) -> dict[str, Any]:
+async def get_me(token: str = Depends(get_current_token)) -> dict[str, Any]:
     try:
         return await superset_auth.get_me(token=token)
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=401, detail="Token inválido ou expirado"
+            ) from exc
+        raise HTTPException(
+            status_code=502, detail="Erro ao comunicar com o serviço de autenticação"
+        ) from exc
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503, detail="Serviço de autenticação indisponível"
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=502, detail="Erro interno ao obter dados do usuário"
+        ) from None

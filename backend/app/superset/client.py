@@ -20,7 +20,7 @@ class SupersetClient:
         self._csrf_token: str | None = None
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=30.0,
+            timeout=settings.superset_timeout,
             cookies={},
         )
 
@@ -68,6 +68,38 @@ class SupersetClient:
         logger.info("Token do Superset renovado")
         return data
 
+    async def login_as(self, username: str, password: str) -> dict[str, Any]:
+        """Login with explicit credentials (for user-facing auth)."""
+        response = await self._client.post(
+            "/api/v1/security/login",
+            json={
+                "username": username,
+                "password": password,
+                "provider": "db",
+                "refresh": True,
+            },
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def refresh_user_token(self, refresh_token: str) -> dict[str, Any]:
+        """Refresh a user token (for user-facing auth)."""
+        response = await self._client.post(
+            "/api/v1/security/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_current_user(self, token: str) -> dict[str, Any]:
+        """Get current user info using a user-provided token."""
+        response = await self._client.get(
+            "/api/v1/me/",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def _request(
         self,
         method: str,
@@ -111,6 +143,14 @@ class SupersetClient:
 
     async def delete(self, path: str, **kwargs: Any) -> httpx.Response:
         return await self._request("DELETE", path, **kwargs)
+
+    async def check_health(self) -> bool:
+        """Check if Superset is reachable."""
+        try:
+            response = await self._client.get("/api/v1/security/csrf_token/")
+            return response.status_code in (200, 401)
+        except Exception:
+            return False
 
     async def close(self) -> None:
         await self._client.aclose()

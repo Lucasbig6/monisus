@@ -1,0 +1,36 @@
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import localFont from "next/font/local"
+import "./globals.css"
+import { AppShell } from "@/components/layout/app-shell"
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+})
+
+const jetbrainsMono = localFont({
+  src: "./fonts/JetBrainsMono-Regular.woff2",
+  variable: "--font-jetbrains-mono",
+})
+
+export const metadata: Metadata = {
+  title: "MoniSUS",
+  description: "Plataforma de monitoramento e análise de dados do SUS",
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="pt-BR" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body>
+        <AppShell>
+          {children}
+        </AppShell>
+      </body>
+    </html>
+  )
+}

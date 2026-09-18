@@ -36,6 +36,7 @@ services:
       REDIS_URL: "redis://redis:6379/0"
     volumes:
       - ./superset_config.py:/app/pythonpath/superset_config.py
+      - ./seed_demo.py:/app/seed_demo.py
     depends_on:
       db:
         condition: service_healthy

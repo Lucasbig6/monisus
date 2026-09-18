@@ -1,4 +1,4 @@
-.PHONY: dev dev-f dev-b build lint test stop stop-f stop-b superset-up superset-down down clean help
+.PHONY: dev dev-f dev-b build lint test stop stop-f stop-b superset-up superset-down superset-seed down clean help
 
 help: ## Mostra ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -37,6 +37,14 @@ superset-up: ## Sobe Superset (Docker)
 
 superset-down: ## Para Superset
 	cd superset && docker compose down
+
+superset-seed: ## Popula dados DEMO no Superset
+	@echo "Recriando container Superset com volume do seed..."
+	cd superset && docker compose up -d --build superset
+	@echo "Aguardando Superset ficar pronto..."
+	@sleep 5
+	@echo "Executando seed..."
+	docker exec superset_app python /app/seed_demo.py
 
 down: ## Para tudo (frontend + backend + superset)
 	@make stop

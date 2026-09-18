@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { ChevronDown, User, Settings, LogOut } from "lucide-react"
 import {
   DropdownMenu,
@@ -9,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { clearTokens } from "@/lib/auth"
 
 const user = {
   name: "Lucas Admin",
@@ -16,7 +18,13 @@ const user = {
 }
 
 export function Header() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
+
+  function handleLogout() {
+    clearTokens()
+    router.push("/login")
+  }
 
   return (
     <header className="flex h-14 items-center justify-end border-b border-slate-200 bg-white px-6">
@@ -48,7 +56,10 @@ export function Header() {
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem className="cursor-pointer gap-2.5 text-destructive focus:text-destructive">
+          <DropdownMenuItem
+            className="cursor-pointer gap-2.5 text-destructive focus:text-destructive"
+            onClick={handleLogout}
+          >
             <LogOut size={16} />
             <span>Sair</span>
           </DropdownMenuItem>

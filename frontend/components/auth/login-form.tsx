@@ -6,7 +6,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { login, ApiError } from "@/lib/auth"
+import { login, saveTokens, ApiError } from "@/lib/auth"
 
 export function LoginForm() {
   const router = useRouter()
@@ -29,7 +29,7 @@ export function LoginForm() {
 
     try {
       const data = await login(username.trim(), password)
-      console.log("Login successful:", data)
+      saveTokens(data)
       router.push("/inicio")
     } catch (err) {
       if (err instanceof ApiError) {

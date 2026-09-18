@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useSyncExternalStore } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -16,7 +16,7 @@ import {
 const navigation = [
   {
     name: "Início",
-    href: "/",
+    href: "/inicio",
     icon: Home,
   },
   {
@@ -41,18 +41,28 @@ const navigation = [
   },
 ]
 
-function getInitialCollapsed() {
-  if (typeof window === "undefined") return false
+function getSnapshot() {
   return localStorage.getItem("sidebar-collapsed") === "true"
+}
+
+function getServerSnapshot() {
+  return false
+}
+
+function subscribe(callback: () => void) {
+  window.addEventListener("storage", callback)
+  return () => window.removeEventListener("storage", callback)
 }
 
 export function Sidebar() {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(getInitialCollapsed)
+  const collapsed = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 
-  useEffect(() => {
-    localStorage.setItem("sidebar-collapsed", String(collapsed))
-  }, [collapsed])
+  const toggleCollapsed = () => {
+    const newValue = !collapsed
+    localStorage.setItem("sidebar-collapsed", String(newValue))
+    window.dispatchEvent(new Event("storage"))
+  }
 
   return (
     <aside
@@ -81,8 +91,8 @@ export function Sidebar() {
           const Icon = item.icon
 
           const isActive =
-            item.href === "/"
-              ? pathname === "/"
+            item.href === "/inicio"
+              ? pathname === "/inicio" || pathname === "/"
               : pathname.startsWith(item.href)
 
           return (
@@ -111,7 +121,7 @@ export function Sidebar() {
       {/* Toggle */}
       <div className="border-t border-slate-200/50 p-3">
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleCollapsed}
           className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-slate-600 transition-all duration-200 hover:bg-slate-100/80 hover:text-slate-900 hover:translate-x-1 cursor-pointer ${
             collapsed ? "justify-center" : ""
           }`}

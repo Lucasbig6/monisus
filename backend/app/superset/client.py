@@ -56,11 +56,15 @@ class SupersetClient:
     async def refresh(self) -> dict[str, Any]:
         if not self._refresh_token:
             return await self.login()
-        response = await self._client.post(
-            "/api/v1/security/refresh",
-            json={"refresh_token": self._refresh_token},
-        )
-        response.raise_for_status()
+        try:
+            response = await self._client.post(
+                "/api/v1/security/refresh",
+                json={"refresh_token": self._refresh_token},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            logger.warning("Refresh token expirado, fazendo login completo")
+            return await self.login()
         data = response.json()
         self._access_token = data["access_token"]
         self._refresh_token = data.get("refresh_token", self._refresh_token)
@@ -120,7 +124,11 @@ class SupersetClient:
 
         if response.status_code == 401:
             logger.info("Token expirado, renovando...")
-            await self.refresh()
+            try:
+                await self.refresh()
+            except Exception:
+                logger.warning("Refresh falhou, fazendo login completo")
+                await self.login()
             headers["Authorization"] = f"Bearer {self._access_token}"
             if self._csrf_token and method.upper() in ("POST", "PUT", "DELETE"):
                 headers["X-CSRFToken"] = self._csrf_token

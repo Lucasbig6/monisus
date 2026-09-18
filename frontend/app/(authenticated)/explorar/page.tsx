@@ -119,7 +119,7 @@ export default function ExplorarPage() {
               <Database size={20} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Dataset</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Conjuntos de dados</h2>
               <p className="text-xs text-slate-500">
                 Selecione o conjunto de dados para consulta.
               </p>

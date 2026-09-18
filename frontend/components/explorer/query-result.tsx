@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
   Table,
   TableBody,
@@ -22,6 +22,12 @@ interface QueryResultProps {
 
 export function QueryResult({ data, loading, error }: QueryResultProps) {
   const [page, setPage] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  function goToPage(p: number) {
+    setPage(p)
+    containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   if (loading) {
     return (
@@ -99,37 +105,45 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
   const pageNumbers = getPageNumbers()
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div ref={containerRef} className="rounded-lg border border-slate-200 bg-white">
       <div className="border-b border-slate-200 px-4 py-2">
         <span className="text-xs text-slate-500">
           {data.length} registro{data.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((col) => (
-              <TableHead key={col} className="bg-slate-50">
-                {col}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pageData.map((row, i) => (
-            <TableRow key={start + i}>
+      <div className="max-h-[500px] overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-b-2 border-b-slate-300 hover:bg-slate-50">
               {columns.map((col) => (
-                <TableCell key={col}>
-                  {row[col] === null || row[col] === undefined
-                    ? "—"
-                    : String(row[col])}
-                </TableCell>
+                <TableHead
+                  key={col}
+                  className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                >
+                  {col}
+                </TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {pageData.map((row, i) => (
+              <TableRow key={start + i} className="even:bg-slate-50/50">
+                {columns.map((col, colIdx) => (
+                  <TableCell
+                    key={col}
+                    className={`px-4 py-3 text-sm text-slate-700 ${colIdx < columns.length - 1 ? "border-r border-r-slate-100" : ""}`}
+                  >
+                    {row[col] === null || row[col] === undefined
+                      ? "—"
+                      : String(row[col])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2">
@@ -140,7 +154,7 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
             <Button
               variant="outline"
               size="icon-xs"
-              onClick={() => setPage((p) => p - 1)}
+              onClick={() => goToPage(page - 1)}
               disabled={page === 0}
             >
               <ChevronLeft size={14} />
@@ -156,7 +170,7 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
                   key={p}
                   variant={p === page + 1 ? "default" : "outline"}
                   size="icon-xs"
-                  onClick={() => setPage(p - 1)}
+                  onClick={() => goToPage(p - 1)}
                 >
                   {p}
                 </Button>
@@ -166,7 +180,7 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
             <Button
               variant="outline"
               size="icon-xs"
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => goToPage(page + 1)}
               disabled={page === totalPages - 1}
             >
               <ChevronRight size={14} />

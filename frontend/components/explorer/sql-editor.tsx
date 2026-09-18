@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { useCallback, useEffect, useRef } from "react"
 import { Loader2, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { OnMount } from "@monaco-editor/react"
@@ -111,17 +112,29 @@ export function SqlEditor({
   datasets = [],
   columns = [],
 }: SqlEditorProps) {
-  const datasetsRef = datasets
-  const columnsRef = columns
+  const datasetsRef = useRef(datasets)
+  const columnsRef = useRef(columns)
 
-  const handleMount: OnMount = (editor, monaco) => {
+  const onExecuteRef = useRef(onExecute)
+  const loadingRef = useRef(loading)
+  const disabledRef = useRef(disabled)
+
+  useEffect(() => {
+    datasetsRef.current = datasets
+    columnsRef.current = columns
+    onExecuteRef.current = onExecute
+    loadingRef.current = loading
+    disabledRef.current = disabled
+  })
+
+  const handleMount: OnMount = useCallback((editor, monaco) => {
     editor.addAction({
       id: "execute-query",
       label: "Executar consulta",
       keybindings: [2048 | 49],
       run: () => {
-        if (!loading && !disabled) {
-          onExecute()
+        if (!loadingRef.current && !disabledRef.current) {
+          onExecuteRef.current()
         }
       },
     })
@@ -155,17 +168,17 @@ export function SqlEditor({
         let suggestions
 
         if (isAfterFromKeyword) {
-          suggestions = buildDatasetSuggestions(datasetsRef, monaco, range)
+          suggestions = buildDatasetSuggestions(datasetsRef.current, monaco, range)
         } else {
           const keywords = buildKeywordSuggestions(monaco, range)
-          const cols = buildColumnSuggestions(columnsRef, monaco, range)
+          const cols = buildColumnSuggestions(columnsRef.current, monaco, range)
           suggestions = [...keywords, ...cols]
         }
 
         return { suggestions }
       },
     })
-  }
+  }, [])
 
   function handleChange(val: string | undefined) {
     if (val !== undefined) {

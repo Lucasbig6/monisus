@@ -36,20 +36,25 @@ export function DatasetSelector({
   }
 
   return (
-    <select
-      value={value ?? ""}
-      onChange={handleChange}
-      disabled={disabled}
-      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-300 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <option value="" disabled>
-        Selecione um dataset...
-      </option>
-      {datasets.map((dataset) => (
-        <option key={dataset.id} value={dataset.id}>
-          {dataset.table_name}
+    <div className="w-full">
+      <label className="mb-1.5 block text-sm font-medium text-slate-700 sm:hidden">
+        Conjunto de dados
+      </label>
+      <select
+        value={value ?? ""}
+        onChange={handleChange}
+        disabled={disabled}
+        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors hover:border-slate-300 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <option value="" disabled>
+          Selecione um conjunto de dados...
         </option>
-      ))}
-    </select>
+        {datasets.map((dataset) => (
+          <option key={dataset.id} value={dataset.id}>
+            {dataset.table_name}
+          </option>
+        ))}
+      </select>
+    </div>
   )
 }

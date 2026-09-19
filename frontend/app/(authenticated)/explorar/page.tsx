@@ -100,7 +100,7 @@ export default function ExplorarPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <section>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -193,7 +193,6 @@ export default function ExplorarPage() {
 
           <div className="mt-4">
             <QueryResult
-              key={result ? JSON.stringify(result) : "empty"}
               data={result}
               loading={executing}
               error={executeError}

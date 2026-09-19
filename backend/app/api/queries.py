@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_token
@@ -22,11 +23,17 @@ async def execute_query(
     request: ExecuteQueryRequest,
     token: str = Depends(get_current_token),
 ) -> dict[str, Any]:
-    return await superset_queries.execute_query(
-        database_id=request.database_id,
-        sql=request.sql,
-        schema=request.db_schema,
-    )
+    try:
+        return await superset_queries.execute_query(
+            database_id=request.database_id,
+            sql=request.sql,
+            schema=request.db_schema,
+        )
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)},
+        )
 
 
 class FormatSqlRequest(BaseModel):

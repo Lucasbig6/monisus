@@ -27,7 +27,7 @@ interface MonacoPosition {
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[400px] w-full items-center justify-center rounded-lg border border-slate-200 bg-white">
+    <div className="flex h-[300px] sm:h-[400px] lg:h-[500px] w-full items-center justify-center rounded-lg border border-slate-200 bg-white">
       <Loader2 size={20} className="animate-spin text-slate-400" />
     </div>
   ),
@@ -195,7 +195,8 @@ export function SqlEditor({
           </div>
         )}
         <MonacoEditor
-          height="400px"
+          height="300px"
+          className="h-[300px] sm:h-[400px] lg:h-[500px]"
           language="sql"
           theme="vs"
           value={value}
@@ -221,7 +222,7 @@ export function SqlEditor({
         />
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <span className="text-xs text-slate-400">
           Ctrl+Enter para executar
         </span>
@@ -229,7 +230,7 @@ export function SqlEditor({
         <Button
           onClick={onExecute}
           disabled={loading || disabled}
-          className="bg-teal-600 text-white hover:bg-teal-700"
+          className="w-full sm:w-auto bg-teal-600 text-white hover:bg-teal-700"
         >
           {loading ? (
             <>

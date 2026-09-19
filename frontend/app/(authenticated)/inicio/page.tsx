@@ -36,7 +36,7 @@ const quickActions = [
 
 export default function Home() {
   return (
-    <div className="mx-auto max-w-7xl px-2 py-8">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Introdução */}
       <section>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -51,12 +51,12 @@ export default function Home() {
       {/* Busca */}
       <section className="mt-8">
         <div className="rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 p-6 shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15">
               <Search className="h-5 w-5 text-white" />
             </div>
 
-            <div>
+            <div className="w-full sm:flex-1">
               <h2 className="text-[18px] font-medium text-white font-semibold">
                 O que você deseja analisar?
               </h2>
@@ -67,7 +67,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 w-full">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <Input
@@ -92,7 +92,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {quickActions.map((action) => {
             const Icon = action.icon
 
@@ -120,12 +120,12 @@ export default function Home() {
       {/* Comece por aqui */}
       <section className="mt-10">
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col sm:flex-row items-start gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
               <Activity size={20} />
             </div>
 
-            <div>
+            <div className="w-full">
               <h2 className="text-base font-semibold text-slate-900">
                 Comece por aqui
               </h2>

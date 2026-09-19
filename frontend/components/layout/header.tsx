@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, User, Settings, LogOut } from "lucide-react"
+import { ChevronDown, Menu, User, Settings, LogOut } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,11 @@ const user = {
   initials: "LA",
 }
 
-export function Header() {
+interface HeaderProps {
+  onMenuClick: () => void
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
 
@@ -27,7 +31,15 @@ export function Header() {
   }
 
   return (
-    <header className="flex h-14 items-center justify-end border-b border-slate-200 bg-white px-6">
+    <header className="flex h-14 items-center justify-end border-b border-slate-200 bg-white px-4 lg:px-6">
+      <button
+        onClick={onMenuClick}
+        className="lg:hidden mr-2 flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100"
+        aria-label="Abrir menu"
+      >
+        <Menu size={22} />
+      </button>
+
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 cursor-pointer">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-sm font-semibold text-white shadow-sm">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import {
   Table,
@@ -11,8 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ChevronLeft, ChevronRight, Inbox, Loader2 } from "lucide-react"
-import { VisualizationPanel } from "@/components/explorer/visualization-panel"
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Inbox, Loader2, Save } from "lucide-react"
+import {
+  VisualizationPanel,
+  type ChartType,
+  analyzeColumns,
+} from "@/components/explorer/visualization-panel"
+import { SaveAnalysisDialog } from "@/components/explorer/save-analysis-dialog"
+import { saveAnalysis } from "@/lib/storage/analyses"
 
 const PAGE_SIZE = 10
 
@@ -20,17 +26,76 @@ interface QueryResultProps {
   data: Record<string, unknown>[] | null
   loading: boolean
   error: string | null
+  sql?: string
+  databaseId?: number
+  dbSchema?: string | null
 }
 
-export function QueryResult({ data, loading, error }: QueryResultProps) {
+export function QueryResult({ data, loading, error, sql, databaseId, dbSchema }: QueryResultProps) {
   const [pagination, setPagination] = useState({ data, page: 0 })
   const [viewMode, setViewMode] = useState<"table" | "chart">("table")
   const containerRef = useRef<HTMLDivElement>(null)
   const page = pagination.data === data ? pagination.page : 0
 
+  const [chartType, setChartType] = useState<Exclude<ChartType, "table">>("bar")
+  const [dimension, setDimension] = useState<string | null>(null)
+  const [metric, setMetric] = useState<string | null>(null)
+
+  const columns = useMemo(
+    () => (data ? analyzeColumns(data) : []),
+    [data]
+  )
+  const dimensionOptions = useMemo(
+    () =>
+      columns
+        .filter((c) => c.type === "categorical")
+        .map((c) => ({ value: c.name, label: c.name })),
+    [columns]
+  )
+  const metricOptions = useMemo(
+    () =>
+      columns
+        .filter((c) => c.type === "numeric")
+        .map((c) => ({ value: c.name, label: c.name })),
+    [columns]
+  )
+
+  const effectiveDimension = useMemo(() => {
+    if (dimension && dimensionOptions.some((o) => o.value === dimension)) {
+      return dimension
+    }
+    return dimensionOptions[0]?.value ?? null
+  }, [dimension, dimensionOptions])
+
+  const effectiveMetric = useMemo(() => {
+    if (metric && metricOptions.some((o) => o.value === metric)) {
+      return metric
+    }
+    return metricOptions[0]?.value ?? null
+  }, [metric, metricOptions])
+
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
   function goToPage(p: number) {
     setPagination((prev) => ({ ...prev, page: p }))
     containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  function handleSaveAnalysis(name: string, description: string) {
+    saveAnalysis({
+      name,
+      description,
+      sql: sql ?? "",
+      databaseId: databaseId ?? 0,
+      dbSchema: dbSchema ?? null,
+      chartType: viewMode === "table" ? "table" : chartType,
+      dimension: viewMode === "table" ? null : effectiveDimension,
+      metric: viewMode === "table" ? null : effectiveMetric,
+    })
+    setSaveDialogOpen(false)
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 3000)
   }
 
   if (loading) {
@@ -71,7 +136,7 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
     )
   }
 
-  const columns = Object.keys(data[0])
+  const tableColumns = Object.keys(data[0])
   const totalPages = Math.ceil(data.length / PAGE_SIZE)
   const start = page * PAGE_SIZE
   const end = start + PAGE_SIZE
@@ -114,38 +179,63 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
         <span className="text-xs text-slate-500">
           {data.length} registro{data.length !== 1 ? "s" : ""}
         </span>
-        <div
-          className="inline-flex w-full gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:w-auto"
-          role="group"
-          aria-label="Modo de visualização"
-        >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <div
+            className="inline-flex w-full gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:w-auto"
+            role="group"
+            aria-label="Modo de visualização"
+          >
+            <Button
+              type="button"
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              aria-pressed={viewMode === "table"}
+              className="flex-1 sm:flex-none"
+            >
+              Tabela
+            </Button>
+            <Button
+              type="button"
+              variant={viewMode === "chart" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("chart")}
+              aria-pressed={viewMode === "chart"}
+              className="flex-1 sm:flex-none"
+            >
+              Visualizar
+            </Button>
+          </div>
           <Button
             type="button"
-            variant={viewMode === "table" ? "default" : "outline"}
+            variant="outline"
             size="sm"
-            onClick={() => setViewMode("table")}
-            aria-pressed={viewMode === "table"}
-            className="flex-1 sm:flex-none"
+            onClick={() => setSaveDialogOpen(true)}
+            className="shrink-0"
           >
-            Tabela
-          </Button>
-          <Button
-            type="button"
-            variant={viewMode === "chart" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("chart")}
-            aria-pressed={viewMode === "chart"}
-            className="flex-1 sm:flex-none"
-          >
-            Visualizar
+            <Save size={14} />
+            Salvar análise
           </Button>
         </div>
       </div>
+
+      {saveSuccess && (
+        <div className="flex items-center gap-2 border-b border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-700">
+          <CheckCircle size={16} />
+          Análise salva com sucesso.
+        </div>
+      )}
 
       {viewMode === "chart" ? (
         <VisualizationPanel
           data={data}
           onBackToTable={() => setViewMode("table")}
+          chartType={chartType}
+          onChartTypeChange={setChartType}
+          dimension={dimension}
+          onDimensionChange={setDimension}
+          metric={metric}
+          onMetricChange={setMetric}
         />
       ) : (
         <>
@@ -153,7 +243,7 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
           <div className="lg:hidden px-4 py-4 space-y-3">
         {pageData.map((row, i) => (
           <div key={start + i} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            {columns.map((col) => (
+            {tableColumns.map((col) => (
               <div key={col} className="flex justify-between py-1.5 border-b border-slate-100 last:border-0">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                   {col}
@@ -173,7 +263,7 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
           <Table>
             <TableHeader>
               <TableRow className="border-b-2 border-b-slate-300 hover:bg-slate-50">
-                {columns.map((col) => (
+                {tableColumns.map((col) => (
                   <TableHead
                     key={col}
                     className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600"
@@ -186,12 +276,12 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
             <TableBody>
               {pageData.map((row, i) => (
                 <TableRow key={start + i} className="even:bg-slate-50/50">
-                  {columns.map((col, colIdx) => (
+                  {tableColumns.map((col, colIdx) => (
                     <TableCell
                       key={col}
                       className={cn(
                         "px-4 py-3 text-sm text-slate-700",
-                        colIdx < columns.length - 1 && "border-r border-r-slate-100"
+                        colIdx < tableColumns.length - 1 && "border-r border-r-slate-100"
                       )}
                     >
                       {row[col] === null || row[col] === undefined
@@ -290,6 +380,12 @@ export function QueryResult({ data, loading, error }: QueryResultProps) {
       )}
         </>
       )}
+
+      <SaveAnalysisDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        onSave={handleSaveAnalysis}
+      />
     </div>
   )
 }

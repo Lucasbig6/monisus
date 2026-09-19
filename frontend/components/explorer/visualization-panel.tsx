@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,9 +23,21 @@ export interface ColumnInfo {
   type: ColumnType
 }
 
+export type VisualizationConfig = {
+  chartType: Exclude<ChartType, "table">
+  dimension: string | null
+  metric: string | null
+}
+
 interface VisualizationPanelProps {
   data: Record<string, unknown>[]
   onBackToTable: () => void
+  chartType: Exclude<ChartType, "table">
+  onChartTypeChange: (value: Exclude<ChartType, "table">) => void
+  dimension: string | null
+  onDimensionChange: (value: string) => void
+  metric: string | null
+  onMetricChange: (value: string) => void
 }
 
 export function analyzeColumns(
@@ -52,6 +64,12 @@ export function analyzeColumns(
 export function VisualizationPanel({
   data,
   onBackToTable,
+  chartType,
+  onChartTypeChange,
+  dimension,
+  onDimensionChange,
+  metric,
+  onMetricChange,
 }: VisualizationPanelProps) {
   const columns = useMemo(() => analyzeColumns(data), [data])
   const dimensionOptions = useMemo<ColumnSelectorOption[]>(
@@ -68,10 +86,6 @@ export function VisualizationPanel({
         .map((column) => ({ value: column.name, label: column.name })),
     [columns]
   )
-
-  const [chartType, setChartType] = useState<Exclude<ChartType, "table">>("bar")
-  const [dimension, setDimension] = useState<string | null>(null)
-  const [metric, setMetric] = useState<string | null>(null)
 
   const effectiveDimension = useMemo(() => {
     if (dimension && dimensionOptions.some((o) => o.value === dimension)) {
@@ -130,14 +144,14 @@ export function VisualizationPanel({
               { value: "pie", label: "Pizza" },
             ]}
             value={chartType}
-            onChange={(value) => setChartType(value as Exclude<ChartType, "table">)}
+            onChange={(value) => onChartTypeChange(value as Exclude<ChartType, "table">)}
             placeholder="Selecione um gráfico"
           />
           <ColumnSelector
             label="Dimensão"
             options={dimensionOptions}
             value={effectiveDimension}
-            onChange={setDimension}
+            onChange={onDimensionChange}
             placeholder="Selecione uma dimensão"
             disabled={dimensionOptions.length === 0}
           />
@@ -145,7 +159,7 @@ export function VisualizationPanel({
             label="Métrica"
             options={metricOptions}
             value={effectiveMetric}
-            onChange={setMetric}
+            onChange={onMetricChange}
             placeholder="Selecione uma métrica"
             disabled={metricOptions.length === 0}
           />

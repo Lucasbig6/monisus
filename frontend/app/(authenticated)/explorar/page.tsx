@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { AlertCircle, Database } from "lucide-react"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { AlertCircle, Database, Loader2 } from "lucide-react"
 import dynamic from "next/dynamic"
+import { useSearchParams } from "next/navigation"
 import { DatasetSelector } from "@/components/explorer/dataset-selector"
 import { QueryResult } from "@/components/explorer/query-result"
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/lib/api/datasets"
 import { executeQuery } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
+import { getAnalysis } from "@/lib/storage/analyses"
 
 const SqlEditor = dynamic(
   () =>
@@ -23,7 +25,10 @@ const SqlEditor = dynamic(
 
 const DEFAULT_SQL = ""
 
-export default function ExplorarPage() {
+function ExplorarContent() {
+  const searchParams = useSearchParams()
+  const analysisId = searchParams.get("analysisId")
+
   const [datasets, setDatasets] = useState<DatasetListItem[]>([])
   const [loadingDatasets, setLoadingDatasets] = useState(true)
   const [datasetsError, setDatasetsError] = useState<string | null>(null)
@@ -34,6 +39,8 @@ export default function ExplorarPage() {
   const [result, setResult] = useState<Record<string, unknown>[] | null>(null)
   const [executing, setExecuting] = useState(false)
   const [executeError, setExecuteError] = useState<string | null>(null)
+
+  const analysisLoadedRef = useRef(false)
 
   useEffect(() => {
     async function load() {
@@ -52,6 +59,25 @@ export default function ExplorarPage() {
     }
     load()
   }, [])
+
+  useEffect(() => {
+    if (!analysisId || analysisLoadedRef.current || loadingDatasets) return
+
+    const analysis = getAnalysis(analysisId)
+    if (!analysis) return
+
+    analysisLoadedRef.current = true
+
+    requestAnimationFrame(() => {
+      setSql(analysis.sql)
+      if (datasets.length > 0 && analysis.databaseId) {
+        const match = datasets.find((ds) => ds.database.id === analysis.databaseId)
+        if (match) {
+          setSelectedDataset(match)
+        }
+      }
+    })
+  }, [analysisId, loadingDatasets, datasets])
 
   async function handleSelectDataset(dataset: DatasetListItem) {
     setSelectedDataset(dataset)
@@ -196,10 +222,29 @@ export default function ExplorarPage() {
               data={result}
               loading={executing}
               error={executeError}
+              sql={sql}
+              databaseId={selectedDataset?.database.id}
+              dbSchema={selectedDataset?.schema ?? null}
             />
           </div>
         </div>
       </section>
     </div>
+  )
+}
+
+export default function ExplorarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center p-12">
+            <Loader2 size={20} className="animate-spin text-slate-400" />
+          </div>
+        </div>
+      }
+    >
+      <ExplorarContent />
+    </Suspense>
   )
 }

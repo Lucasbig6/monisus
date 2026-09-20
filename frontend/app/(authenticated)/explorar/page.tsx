@@ -225,6 +225,7 @@ function ExplorarContent() {
               sql={sql}
               databaseId={selectedDataset?.database.id}
               dbSchema={selectedDataset?.schema ?? null}
+              datasetId={selectedDataset?.id ?? null}
             />
           </div>
         </div>

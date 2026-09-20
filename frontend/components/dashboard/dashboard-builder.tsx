@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button"
 import type { Dashboard, DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
 import type { Analysis } from "@/lib/types/analysis"
 import { updateDashboard } from "@/lib/storage/dashboards"
+import { getDistinctValues } from "@/lib/api/datasets"
 import { DashboardWidgetView } from "./dashboard-widget"
 import { AddAnalysisDialog } from "./add-analysis-dialog"
+import { AddFilterDialog } from "./add-filter-dialog"
 import { DashboardFiltersBar } from "./dashboard-filters-bar"
 
 import {
@@ -40,12 +42,74 @@ export function DashboardBuilder({
 }: DashboardBuilderProps) {
   const [editing, setEditing] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addFilterOpen, setAddFilterOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+
+  const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>(
+    () => {
+      const initial: Record<string, string | string[]> = {}
+      for (const f of dashboard.filters) {
+        initial[f.id] = f.defaultValue
+      }
+      return initial
+    }
+  )
+
+  const [distinctValues, setDistinctValues] = useState<Record<string, string[]>>({})
+  const [loadingDistinct, setLoadingDistinct] = useState(false)
 
   const { width, mounted, containerRef } = useContainerWidth({
     measureBeforeMount: true,
     initialWidth: 1280,
   })
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      setFilterValues((prev) => {
+        const next: Record<string, string | string[]> = {}
+        for (const f of dashboard.filters) {
+          next[f.id] = prev[f.id] ?? f.defaultValue
+        }
+        return next
+      })
+    })
+  }, [dashboard.filters])
+
+  useEffect(() => {
+    if (dashboard.filters.length === 0) {
+      requestAnimationFrame(() => setDistinctValues({}))
+      return
+    }
+
+    let cancelled = false
+    async function load() {
+      setLoadingDistinct(true)
+      const newDistinct: Record<string, string[]> = {}
+
+      for (const f of dashboard.filters) {
+        if (newDistinct[f.id]) continue
+        try {
+          const res = await getDistinctValues(f.datasetId, f.column)
+          if (!cancelled) {
+            newDistinct[f.id] = res.result ?? []
+          }
+        } catch {
+          if (!cancelled) {
+            newDistinct[f.id] = []
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setDistinctValues((prev) => ({ ...prev, ...newDistinct }))
+        setLoadingDistinct(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [dashboard.filters])
 
   const layouts = useMemo(() => {
     const lg = dashboard.widgets.map((w) => ({
@@ -72,12 +136,7 @@ export function DashboardBuilder({
     return { lg, md, sm }
   }, [dashboard.widgets])
 
-  const handleLayoutChange = useCallback(
-    () => {
-      // only update state, do not persist yet
-    },
-    []
-  )
+  const handleLayoutChange = useCallback(() => {}, [])
 
   const handleDragStop = useCallback(
     (newLayout: import("react-grid-layout").Layout) => {
@@ -159,23 +218,41 @@ export function DashboardBuilder({
     [dashboard, onDashboardChange]
   )
 
-  const handleAddFilter = useCallback(() => {
-    const newFilter: DashboardFilter = {
-      id: crypto.randomUUID(),
-      column: "coluna_exemplo",
-      type: "select",
-      value: null,
-      scope: "dashboard",
-    }
+  const handleAddFilter = useCallback(
+    (filterData: Omit<DashboardFilter, "id">) => {
+      const newFilter: DashboardFilter = {
+        ...filterData,
+        id: crypto.randomUUID(),
+      }
 
-    const updated = {
-      ...dashboard,
-      filters: [...dashboard.filters, newFilter],
-    }
+      const updated = {
+        ...dashboard,
+        filters: [...dashboard.filters, newFilter],
+      }
 
-    updateDashboard(updated)
-    onDashboardChange(updated)
-  }, [dashboard, onDashboardChange])
+      updateDashboard(updated)
+      onDashboardChange(updated)
+
+      setFilterValues((prev) => ({
+        ...prev,
+        [newFilter.id]: newFilter.defaultValue,
+      }))
+
+      setLoadingDistinct(true)
+      getDistinctValues(newFilter.datasetId, newFilter.column)
+        .then((res) => {
+          setDistinctValues((prev) => ({
+            ...prev,
+            [newFilter.id]: res.result ?? [],
+          }))
+        })
+        .catch(() => {
+          setDistinctValues((prev) => ({ ...prev, [newFilter.id]: [] }))
+        })
+        .finally(() => setLoadingDistinct(false))
+    },
+    [dashboard, onDashboardChange]
+  )
 
   const handleRemoveFilter = useCallback(
     (filterId: string) => {
@@ -186,8 +263,26 @@ export function DashboardBuilder({
 
       updateDashboard(updated)
       onDashboardChange(updated)
+
+      setFilterValues((prev) => {
+        const next = { ...prev }
+        delete next[filterId]
+        return next
+      })
+      setDistinctValues((prev) => {
+        const next = { ...prev }
+        delete next[filterId]
+        return next
+      })
     },
     [dashboard, onDashboardChange]
+  )
+
+  const handleFilterValueChange = useCallback(
+    (filterId: string, value: string | string[]) => {
+      setFilterValues((prev) => ({ ...prev, [filterId]: value }))
+    },
+    []
   )
 
   const handleRefreshAll = useCallback(() => {
@@ -269,7 +364,7 @@ export function DashboardBuilder({
       </section>
 
       {/* Filters */}
-      {dashboard.filters.length > 0 || editing ? (
+      {(dashboard.filters.length > 0 || editing) && (
         <section className="mt-4">
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
             <div className="flex items-center gap-2">
@@ -282,13 +377,17 @@ export function DashboardBuilder({
               <DashboardFiltersBar
                 filters={dashboard.filters}
                 editing={editing}
-                onAdd={handleAddFilter}
+                filterValues={filterValues}
+                loadingDistinct={loadingDistinct}
+                distinctValues={distinctValues}
+                onAdd={() => setAddFilterOpen(true)}
                 onRemove={handleRemoveFilter}
+                onValueChange={handleFilterValueChange}
               />
             </div>
           </div>
         </section>
-      ) : null}
+      )}
 
       {/* Grid */}
       <section className="mt-6">
@@ -343,6 +442,8 @@ export function DashboardBuilder({
                   <div className={editing ? "pt-6 h-full" : "h-full"}>
                     <DashboardWidgetView
                       widget={widget}
+                      filters={dashboard.filters}
+                      filterValues={filterValues}
                       onRemove={handleRemoveWidget}
                       key={`${widget.id}-${refreshKey}`}
                     />
@@ -360,6 +461,15 @@ export function DashboardBuilder({
         onOpenChange={setAddDialogOpen}
         onSelect={handleAddAnalysis}
         excludeIds={excludeAnalysisIds}
+      />
+
+      {/* Add Filter Dialog */}
+      <AddFilterDialog
+        open={addFilterOpen}
+        onOpenChange={setAddFilterOpen}
+        onAdd={handleAddFilter}
+        existingFilters={dashboard.filters}
+        dashboardWidgetAnalysisIds={dashboard.widgets.map((w) => w.analysisId)}
       />
     </div>
   )

@@ -14,7 +14,7 @@ const jetbrainsMono = localFont({
 })
 
 export const metadata: Metadata = {
-  title: "MoniSUS",
+  title: "MoniSUS - Plataforma de monitoramento e análise de dados do SUS",
   description: "Plataforma de monitoramento e análise de dados do SUS",
 }
 

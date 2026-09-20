@@ -30,10 +30,23 @@ export interface DatasetDetail extends DatasetListItem {
   description: string | null
 }
 
+export interface DistinctValuesResponse {
+  result: string[]
+}
+
 export async function listDatasets(): Promise<DatasetsListResponse> {
   return apiGet<DatasetsListResponse>("/api/datasets")
 }
 
 export async function getDataset(id: number): Promise<DatasetDetail> {
   return apiGet<DatasetDetail>(`/api/datasets/${id}`)
+}
+
+export async function getDistinctValues(
+  datasetId: number,
+  columnName: string
+): Promise<DistinctValuesResponse> {
+  return apiGet<DistinctValuesResponse>(
+    `/api/datasets/${datasetId}/distinct/${encodeURIComponent(columnName)}`
+  )
 }

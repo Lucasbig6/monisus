@@ -1,8 +1,9 @@
 export interface DashboardFilter {
   id: string
+  datasetId: number
   column: string
-  type: "select" | "multi-select" | "date-range"
-  value: string | string[] | null
+  operator: "eq" | "in" | "gte" | "lte" | "between"
+  defaultValue: string | string[]
   scope: "dashboard" | string[]
 }
 

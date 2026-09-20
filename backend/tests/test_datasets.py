@@ -21,10 +21,42 @@ async def test_list_datasets_unauthorized(client):
 
 
 @pytest.mark.asyncio
-async def test_get_dataset(client, mock_superset_client, auth_headers):
-    mock_superset_client.get.return_value = {"id": 1, "table_name": "Dataset"}
+async def test_get_dataset_unwraps_result(client, mock_superset_client, auth_headers):
+    """Superset retorna {'result': {...}}; backend deve retornar o objeto interno."""
+    mock_superset_client.get.return_value = {
+        "result": {
+            "id": 1,
+            "table_name": "demo_atendimentos",
+            "database": {"id": 1, "database_name": "main"},
+            "schema": "public",
+            "columns": [
+                {
+                    "column_name": "municipio",
+                    "type": "VARCHAR",
+                    "is_dttm": False,
+                    "filterable": True,
+                    "groupby": True,
+                }
+            ],
+        }
+    }
     response = await client.get("/api/datasets/1", headers=auth_headers)
     assert response.status_code == 200
+    body = response.json()
+    assert body["table_name"] == "demo_atendimentos"
+    assert "result" not in body
+    assert len(body["columns"]) == 1
+    assert body["columns"][0]["filterable"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_dataset_no_result_key_returns_404(
+    client, mock_superset_client, auth_headers
+):
+    """Quando Superset retorna sem 'result', backend deve retornar 404."""
+    mock_superset_client.get.return_value = {"id": 1, "table_name": "Dataset"}
+    response = await client.get("/api/datasets/1", headers=auth_headers)
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -35,12 +67,37 @@ async def test_get_dataset_not_found(client, mock_superset_client, auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_get_dataset_columns(client, mock_superset_client, auth_headers):
+async def test_get_dataset_columns_unwraps_result(
+    client, mock_superset_client, auth_headers
+):
+    """Superset retorna {'result': {...}}; backend deve retornar o objeto interno."""
     mock_superset_client.get.return_value = {
-        "columns": [{"column_name": "id", "type": "INTEGER"}],
+        "result": {
+            "id": 1,
+            "table_name": "demo_atendimentos",
+            "columns": [
+                {"column_name": "id", "type": "INTEGER"},
+                {"column_name": "municipio", "type": "VARCHAR"},
+            ],
+        }
     }
     response = await client.get("/api/datasets/1/columns", headers=auth_headers)
     assert response.status_code == 200
+    body = response.json()
+    assert "result" not in body
+    assert len(body["columns"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_dataset_columns_no_result_key_returns_404(
+    client, mock_superset_client, auth_headers
+):
+    """Quando Superset retorna sem 'result', backend deve retornar 404."""
+    mock_superset_client.get.return_value = {
+        "columns": [{"column_name": "id", "type": "INTEGER"}]
+    }
+    response = await client.get("/api/datasets/1/columns", headers=auth_headers)
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

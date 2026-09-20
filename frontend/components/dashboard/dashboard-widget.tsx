@@ -29,9 +29,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChartRenderer } from "@/components/explorer/chart-renderer"
 import type { Analysis } from "@/lib/types/analysis"
-import type { DashboardWidget } from "@/lib/types/dashboard"
+import type { DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
 import { getAnalysis } from "@/lib/storage/analyses"
-import { executeQuery } from "@/lib/api/queries"
+import { executeQuery, executeQueryFiltered } from "@/lib/api/queries"
+import type { FilterClause } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
 
 const chartTypeIcon: Record<Analysis["chartType"], typeof Table2> = {
@@ -43,11 +44,46 @@ const chartTypeIcon: Record<Analysis["chartType"], typeof Table2> = {
 
 interface DashboardWidgetViewProps {
   widget: DashboardWidget
+  filters: DashboardFilter[]
+  filterValues: Record<string, string | string[]>
   onRemove: (widgetId: string) => void
+}
+
+function buildFilterClauses(
+  filters: DashboardFilter[],
+  filterValues: Record<string, string | string[]>,
+  analysis: Analysis
+): FilterClause[] {
+  return filters
+    .filter((f) => {
+      if (analysis.datasetId != null && analysis.datasetId !== f.datasetId) return false
+      if (f.scope === "dashboard") return true
+      return f.scope.includes(analysis.id)
+    })
+    .map((f) => {
+      const rawValue = filterValues[f.id] ?? f.defaultValue
+      if (rawValue === null || rawValue === undefined) return null
+      if (Array.isArray(rawValue) && rawValue.length === 0) return null
+      if (typeof rawValue === "string" && rawValue === "") return null
+
+      let values: string | string[]
+      if (f.operator === "in") {
+        values = Array.isArray(rawValue) ? rawValue : [rawValue]
+      } else if (f.operator === "between") {
+        values = Array.isArray(rawValue) ? rawValue : [rawValue]
+      } else {
+        values = typeof rawValue === "string" ? rawValue : rawValue[0] ?? ""
+      }
+
+      return { column: f.column, operator: f.operator, values }
+    })
+    .filter((f): f is FilterClause => f !== null)
 }
 
 export function DashboardWidgetView({
   widget,
+  filters,
+  filterValues,
   onRemove,
 }: DashboardWidgetViewProps) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
@@ -57,38 +93,65 @@ export function DashboardWidgetView({
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
 
-  const fetchQuery = useCallback(async (sql: string, databaseId: number, dbSchema: string | null) => {
-    setLoading(true)
-    setError(null)
+  const fetchQuery = useCallback(
+    async (sql: string, databaseId: number, dbSchema: string | null) => {
+      setLoading(true)
+      setError(null)
 
-    try {
-      const response = await executeQuery({
-        database_id: databaseId,
-        sql,
-        db_schema: dbSchema ?? undefined,
-      })
+      try {
+        let response
+        if (filters.length > 0 && analysis) {
+          const filterClauses = buildFilterClauses(filters, filterValues, analysis)
+          if (filterClauses.length > 0) {
+            response = await executeQueryFiltered({
+              database_id: databaseId,
+              sql,
+              db_schema: dbSchema ?? undefined,
+              filters: filterClauses,
+            })
+          } else {
+            response = await executeQuery({
+              database_id: databaseId,
+              sql,
+              db_schema: dbSchema ?? undefined,
+            })
+          }
+        } else {
+          response = await executeQuery({
+            database_id: databaseId,
+            sql,
+            db_schema: dbSchema ?? undefined,
+          })
+        }
 
-      if (!mountedRef.current) return
+        if (!mountedRef.current) return
 
-      if (response.status === "error") {
-        setError(response.message || "Erro ao executar a consulta.")
-      } else {
-        setData(response.data ?? [])
+        if (response.status === "error") {
+          setError(response.message || "Erro ao executar a consulta.")
+        } else {
+          setData(response.data ?? [])
+        }
+      } catch (err) {
+        if (!mountedRef.current) return
+
+        const msg =
+          err instanceof ApiError
+            ? err.detail
+            : "Não foi possível executar a consulta."
+        setError(msg)
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false)
+        }
       }
-    } catch (err) {
-      if (!mountedRef.current) return
+    },
+    [filters, filterValues, analysis]
+  )
 
-      const msg =
-        err instanceof ApiError
-          ? err.detail
-          : "Não foi possível executar a consulta."
-      setError(msg)
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-      }
-    }
-  }, [])
+  const fetchQueryRef = useRef(fetchQuery)
+  useEffect(() => {
+    fetchQueryRef.current = fetchQuery
+  })
 
   useEffect(() => {
     mountedRef.current = true
@@ -101,20 +164,28 @@ export function DashboardWidgetView({
       setAnalysisChecked(true)
 
       if (loaded?.databaseId && loaded.sql) {
-        fetchQuery(loaded.sql, loaded.databaseId, loaded.dbSchema)
+        fetchQueryRef.current(loaded.sql, loaded.databaseId, loaded.dbSchema)
       }
     })
 
     return () => {
       mountedRef.current = false
     }
-  }, [widget.analysisId, fetchQuery])
+  }, [widget.analysisId])
 
   useEffect(() => {
     if (analysisChecked && !analysis) {
       onRemove(widget.id)
     }
   }, [analysisChecked, analysis, onRemove, widget.id])
+
+  useEffect(() => {
+    if (analysisChecked && analysis?.databaseId && analysis.sql) {
+      requestAnimationFrame(() => {
+        fetchQueryRef.current(analysis.sql, analysis.databaseId, analysis.dbSchema)
+      })
+    }
+  }, [filterValues, analysisChecked, analysis])
 
   if (!analysisChecked || !analysis) {
     return null

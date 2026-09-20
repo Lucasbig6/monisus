@@ -29,9 +29,10 @@ interface QueryResultProps {
   sql?: string
   databaseId?: number
   dbSchema?: string | null
+  datasetId?: number | null
 }
 
-export function QueryResult({ data, loading, error, sql, databaseId, dbSchema }: QueryResultProps) {
+export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, datasetId }: QueryResultProps) {
   const [pagination, setPagination] = useState({ data, page: 0 })
   const [viewMode, setViewMode] = useState<"table" | "chart">("table")
   const containerRef = useRef<HTMLDivElement>(null)
@@ -89,6 +90,7 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema }:
       sql: sql ?? "",
       databaseId: databaseId ?? 0,
       dbSchema: dbSchema ?? null,
+      datasetId: datasetId ?? null,
       chartType: viewMode === "table" ? "table" : chartType,
       dimension: viewMode === "table" ? null : effectiveDimension,
       metric: viewMode === "table" ? null : effectiveMetric,

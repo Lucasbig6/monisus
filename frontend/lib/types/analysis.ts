@@ -5,6 +5,7 @@ export interface Analysis {
   sql: string
   databaseId: number
   dbSchema: string | null
+  datasetId: number | null
   chartType: "table" | "bar" | "line" | "pie"
   dimension: string | null
   metric: string | null

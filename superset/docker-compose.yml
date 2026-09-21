@@ -44,7 +44,8 @@ services:
         condition: service_healthy
       init:
         condition: service_completed_successfully
-
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   init:
     build:
       context: .

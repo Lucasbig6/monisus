@@ -4,11 +4,19 @@ import logging
 from typing import Any
 from urllib.parse import quote_plus
 
+import httpx
+
 from app.superset.client import superset_client
 
 logger = logging.getLogger(__name__)
 
 _SENSITIVE_KEYS = {"sqlalchemy_uri", "password", "extra", "masked_encrypted_extra"}
+
+
+class SupersetAPIError(Exception):
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
 
 
 def _sanitize_database(db: dict[str, Any]) -> dict[str, Any]:
@@ -45,10 +53,26 @@ async def get_database(database_id: int) -> dict[str, Any]:
     return _sanitize_database(result)
 
 
+async def _extract_superset_error(e: httpx.HTTPStatusError) -> str:
+    try:
+        body = e.response.json()
+        errors = body.get("errors", [])
+        if errors:
+            return errors[0].get("message", "")
+        msg = body.get("message", "")
+        if isinstance(msg, dict):
+            parts = [f"{k}: {v}" for k, v in msg.items()]
+            return "; ".join(parts)
+        if msg:
+            return str(msg)
+    except Exception:
+        pass
+    return ""
+
+
 async def create_database(data: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "database_name": data["database_name"],
-        "engine": data.get("engine", "postgresql"),
         "sqlalchemy_uri": _build_sqlalchemy_uri(
             host=data["host"],
             port=data["port"],
@@ -62,8 +86,13 @@ async def create_database(data: dict[str, Any]) -> dict[str, Any]:
         "allow_dml": False,
         "allow_run_async": False,
     }
-    response = await superset_client.post("/api/v1/database/", json=payload)
-    return response
+    try:
+        response = await superset_client.post("/api/v1/database/", json=payload)
+        return response
+    except httpx.HTTPStatusError as e:
+        detail = await _extract_superset_error(e)
+        logger.warning("Criação de database falhou: %s", detail)
+        raise SupersetAPIError(detail or "Erro ao criar fonte de dados.") from e
 
 
 async def update_database(database_id: int, data: dict[str, Any]) -> dict[str, Any]:
@@ -78,10 +107,15 @@ async def update_database(database_id: int, data: dict[str, Any]) -> dict[str, A
             username=data["username"],
             password=data["password"],
         )
-    response = await superset_client.put(
-        f"/api/v1/database/{database_id}", json=payload
-    )
-    return response
+    try:
+        response = await superset_client.put(
+            f"/api/v1/database/{database_id}", json=payload
+        )
+        return response
+    except httpx.HTTPStatusError as e:
+        detail = await _extract_superset_error(e)
+        logger.warning("Atualização de database falhou: %s", detail)
+        raise SupersetAPIError(detail or "Erro ao atualizar fonte de dados.") from e
 
 
 async def delete_database(database_id: int) -> Any:
@@ -91,7 +125,6 @@ async def delete_database(database_id: int) -> Any:
 async def test_connection(data: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "database_name": data.get("database_name", "test"),
-        "engine": data.get("engine", "postgresql"),
         "sqlalchemy_uri": _build_sqlalchemy_uri(
             host=data["host"],
             port=data["port"],
@@ -102,11 +135,22 @@ async def test_connection(data: dict[str, Any]) -> dict[str, Any]:
     }
     try:
         await superset_client.post(
-            "/api/v1/database/test_connection", json=payload
+            "/api/v1/database/test_connection/", json=payload
         )
         return {"success": True, "message": "Conexão realizada com sucesso."}
-    except Exception:
-        logger.debug("Teste de conexão falhou")
+    except httpx.HTTPStatusError as e:
+        detail = ""
+        try:
+            body = e.response.json()
+            errors = body.get("errors", [])
+            if errors:
+                detail = errors[0].get("message", "")
+        except Exception:
+            pass
+        logger.warning("Teste de conexão falhou: %s", detail)
+        return {"success": False, "message": "Não foi possível conectar ao banco.", "detail": detail}
+    except Exception as e:
+        logger.warning("Teste de conexão falhou: %s", e)
         return {"success": False, "message": "Não foi possível conectar ao banco."}
 
 

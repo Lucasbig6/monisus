@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_token
 from app.superset import sources as superset_sources
+from app.superset.sources import SupersetAPIError
 
 router = APIRouter(prefix="/sources", tags=["Sources"])
 
@@ -52,6 +53,8 @@ async def create_source(
 ) -> dict[str, Any]:
     try:
         return await superset_sources.create_database(request.model_dump())
+    except SupersetAPIError as e:
+        raise HTTPException(status_code=400, detail=e.detail)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -86,6 +89,8 @@ async def update_source(
     try:
         data = request.model_dump(exclude_unset=True)
         return await superset_sources.update_database(source_id, data)
+    except SupersetAPIError as e:
+        raise HTTPException(status_code=400, detail=e.detail)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

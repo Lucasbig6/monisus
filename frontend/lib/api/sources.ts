@@ -1,5 +1,53 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "../api"
 
+export type SourceType = "postgresql" | "csv" | "excel" | "parquet"
+
+export interface SourceTypeConfig {
+  id: SourceType
+  label: string
+  icon: string
+  description: string
+  needsConnection: boolean
+}
+
+export const SOURCE_TYPES: SourceTypeConfig[] = [
+  {
+    id: "postgresql",
+    label: "PostgreSQL",
+    icon: "Database",
+    description: "Conexão com banco de dados PostgreSQL.",
+    needsConnection: true,
+  },
+  {
+    id: "csv",
+    label: "CSV",
+    icon: "FileText",
+    description: "Arquivo de valores separados por vírgula.",
+    needsConnection: false,
+  },
+  {
+    id: "excel",
+    label: "Excel",
+    icon: "Table",
+    description: "Planilha Microsoft Excel (.xlsx).",
+    needsConnection: false,
+  },
+  {
+    id: "parquet",
+    label: "Parquet",
+    icon: "FileStack",
+    description: "Arquivo Apache Parquet colunar.",
+    needsConnection: false,
+  },
+]
+
+export function getSourceTypeConfig(engine: string): SourceTypeConfig {
+  const normalized = engine?.toLowerCase() ?? ""
+  return (
+    SOURCE_TYPES.find((t) => t.id === normalized) ?? SOURCE_TYPES[0]
+  )
+}
+
 export interface SourceListItem {
   id: number
   database_name: string
@@ -47,6 +95,7 @@ export interface TestConnectionRequest {
 export interface TestConnectionResponse {
   success: boolean
   message: string
+  detail?: string
 }
 
 export async function listSources(): Promise<SourcesListResponse> {

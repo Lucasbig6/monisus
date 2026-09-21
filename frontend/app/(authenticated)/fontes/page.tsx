@@ -5,8 +5,11 @@ import Link from "next/link"
 import {
   AlertCircle,
   Database,
+  FileStack,
+  FileText,
   Loader2,
   Plus,
+  Table,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -21,9 +24,17 @@ import {
 import {
   listSources,
   deleteSource,
-  SourceListItem,
+  getSourceTypeConfig,
+  type SourceListItem,
 } from "@/lib/api/sources"
 import { ApiError } from "@/lib/api"
+
+const ICONS: Record<string, typeof Database> = {
+  Database,
+  FileText,
+  Table,
+  FileStack,
+}
 
 export default function FontesPage() {
   const [sources, setSources] = useState<SourceListItem[]>([])
@@ -137,48 +148,53 @@ export default function FontesPage() {
           </h2>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {sources.map((source) => (
-              <div
-                key={source.id}
-                className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                    <Database size={18} />
+            {sources.map((source) => {
+              const typeConfig = getSourceTypeConfig(source.engine)
+              const Icon = ICONS[typeConfig.icon] ?? Database
+
+              return (
+                <div
+                  key={source.id}
+                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                      <Icon size={18} />
+                    </div>
+                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      {typeConfig.label}
+                    </span>
                   </div>
-                  <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 capitalize">
-                    {source.engine}
-                  </span>
-                </div>
 
-                <h3 className="mt-3 text-sm font-semibold text-slate-900 line-clamp-1">
-                  {source.database_name}
-                </h3>
+                  <h3 className="mt-3 text-sm font-semibold text-slate-900 line-clamp-1">
+                    {source.database_name}
+                  </h3>
 
-                <div className="mt-4 flex items-center gap-2">
-                  <Link
-                    href={`/fontes/${source.id}`}
-                    className="flex-1"
-                  >
+                  <div className="mt-4 flex items-center gap-2">
+                    <Link
+                      href={`/fontes/${source.id}`}
+                      className="flex-1"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                      >
+                        Explorar
+                      </Button>
+                    </Link>
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="w-full"
+                      size="icon-sm"
+                      onClick={() => setDeleteTarget(source)}
+                      className="shrink-0 text-slate-500 hover:text-red-600"
                     >
-                      Explorar
+                      <Trash2 size={14} />
                     </Button>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={() => setDeleteTarget(source)}
-                    className="shrink-0 text-slate-500 hover:text-red-600"
-                  >
-                    <Trash2 size={14} />
-                  </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}

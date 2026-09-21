@@ -7,10 +7,14 @@ import {
   AlertCircle,
   ArrowLeft,
   Database,
+  FileStack,
+  FileText,
   Inbox,
   Loader2,
+  Table,
   Table2,
   Trash2,
+  Upload,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,9 +29,17 @@ import {
   getSource,
   getSourceDatasets,
   deleteSource,
-  SourceDetail,
+  getSourceTypeConfig,
+  type SourceDetail,
 } from "@/lib/api/sources"
 import { ApiError } from "@/lib/api"
+
+const ICONS: Record<string, typeof Database> = {
+  Database,
+  FileText,
+  Table,
+  FileStack,
+}
 
 interface DatasetItem {
   id: number
@@ -115,6 +127,10 @@ export default function FonteDetailPage() {
     )
   }
 
+  const typeConfig = getSourceTypeConfig(source.engine)
+  const Icon = ICONS[typeConfig.icon] ?? Database
+  const isFileSource = !typeConfig.needsConnection
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -130,14 +146,14 @@ export default function FonteDetailPage() {
         <div className="mt-3 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-              <Database size={20} />
+              <Icon size={20} />
             </div>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
                 {source.database_name}
               </h1>
-              <p className="mt-0.5 text-sm text-slate-500 capitalize">
-                {source.engine}
+              <p className="mt-0.5 text-sm text-slate-500">
+                {typeConfig.label}
               </p>
             </div>
           </div>
@@ -153,6 +169,24 @@ export default function FonteDetailPage() {
           </Button>
         </div>
       </section>
+
+      {/* File source placeholder */}
+      {isFileSource && (
+        <section className="mt-8">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+              <Upload size={24} className="text-slate-400" />
+            </div>
+            <h2 className="mt-4 text-sm font-semibold text-slate-900">
+              Preparação de dados
+            </h2>
+            <p className="mt-1 max-w-sm text-sm text-slate-500">
+              O upload e a preparação de arquivos {typeConfig.label} serão
+              disponibilizados em uma próxima versão.
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* Datasets */}
       <section className="mt-8">

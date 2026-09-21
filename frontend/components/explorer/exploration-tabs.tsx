@@ -12,9 +12,9 @@ interface TabItem {
 }
 
 const TABS: TabItem[] = [
-  { id: "sql", label: "Consulta SQL", icon: Code2 },
-  { id: "ai", label: "Agente de IA", icon: Bot },
   { id: "builder", label: "Construtor", icon: BarChart3 },
+  { id: "ai", label: "Agente de IA", icon: Bot },
+  { id: "sql", label: "Consulta SQL", icon: Code2 },
 ]
 
 interface ExplorationTabsProps {

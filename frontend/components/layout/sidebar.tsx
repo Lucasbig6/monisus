@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils"
 import {
   Activity,
   BarChart3,
+  Database,
   FileChartColumn,
+  FlaskConical,
   Home,
   PanelLeftClose,
   PanelLeftOpen,
@@ -32,6 +34,11 @@ const navigation = [
     icon: Search,
   },
   {
+    name: "Fontes",
+    href: "/fontes",
+    icon: Database,
+  },
+  {
     name: "Indicadores",
     href: "/indicadores",
     icon: Activity,
@@ -40,6 +47,11 @@ const navigation = [
     name: "Análises",
     href: "/analises",
     icon: FileChartColumn,
+  },
+  {
+    name: "Superset POC",
+    href: "/superset-poc",
+    icon: FlaskConical,
   },
 ]
 

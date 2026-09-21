@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import charts, dashboards, datasets, queries
+from app.api import charts, dashboards, datasets, embeds, queries, sources
 from app.auth import routes as auth_routes
 from app.core.config import settings
 from app.superset.client import superset_client
@@ -45,6 +45,8 @@ app.include_router(dashboards.router, prefix=settings.api_prefix)
 app.include_router(charts.router, prefix=settings.api_prefix)
 app.include_router(datasets.router, prefix=settings.api_prefix)
 app.include_router(queries.router, prefix=settings.api_prefix)
+app.include_router(sources.router, prefix=settings.api_prefix)
+app.include_router(embeds.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

@@ -48,6 +48,7 @@ async def client(mock_superset_client):
         patch("app.superset.charts.superset_client", mock_superset_client),
         patch("app.superset.datasets.superset_client", mock_superset_client),
         patch("app.superset.queries.superset_client", mock_superset_client),
+        patch("app.superset.sources.superset_client", mock_superset_client),
         patch("app.superset.auth.superset_client", mock_superset_client),
     ]
     for p in patches:

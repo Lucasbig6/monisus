@@ -2,6 +2,7 @@ import Link from "next/link"
 import {
   Activity,
   BarChart3,
+  Database,
   FileChartColumn,
   Search,
 } from "lucide-react"
@@ -19,6 +20,12 @@ const quickActions = [
     description: "Explore dados, dimensões, medidas e cruzamentos.",
     href: "/explorar",
     icon: Search,
+  },
+  {
+    title: "Fontes de Dados",
+    description: "Gerencie conexões de dados e fontes disponíveis.",
+    href: "/fontes",
+    icon: Database,
   },
   {
     title: "Indicadores",

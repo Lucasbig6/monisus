@@ -7,6 +7,26 @@ SQLALCHEMY_DATABASE_URI = os.environ.get(
 
 FAB_API_SWAGGER_UI = True
 
+# Allow embedding from MoniSUS frontend
+TALISMAN_CONFIG = {
+    "content_security_policy": {
+        "base-uri": ["'self'"],
+        "default-src": ["'self'"],
+        "img-src": ["'self'", "blob:", "data:", "https://apachesuperset.gateway.scarf.sh", "https://static.scarf.sh/", "ows.terrestris.de", "https://cdn.document360.io"],
+        "worker-src": ["'self'", "blob:"],
+        "connect-src": ["'self'", "https://api.mapbox.com", "https://events.mapbox.com", "https://tile.openstreetmap.org", "https://tile.osm.ch", "https://a.basemaps.cartocdn.com"],
+        "object-src": "'none'",
+        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://use.typekit.net", "https://use.typekit.com"],
+        "font-src": ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://use.typekit.net", "https://use.typekit.com"],
+        "script-src": ["'self'", "'strict-dynamic'"],
+        "frame-ancestors": ["'self'", "http://localhost:3000", "http://127.0.0.1:3000"],
+    },
+    "content_security_policy_nonce_in": ["script-src"],
+    "force_https": False,
+    "session_cookie_secure": False,
+    "frame_options": None,
+}
+
 ENABLE_CORS = True
 CORS_OPTIONS = {
     'supports_credentials': True,

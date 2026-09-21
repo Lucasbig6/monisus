@@ -49,6 +49,27 @@ export async function apiGet<T>(path: string): Promise<T> {
   return data as T
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    handleUnauthorized(response.status)
+    const detail = typeof data?.detail === "string" ? data.detail : "Erro desconhecido"
+    throw new ApiError(response.status, detail)
+  }
+
+  return data as T
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
@@ -68,4 +89,21 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   }
 
   return data as T
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    handleUnauthorized(response.status)
+    const detail = typeof data?.detail === "string" ? data.detail : "Erro desconhecido"
+    throw new ApiError(response.status, detail)
+  }
 }

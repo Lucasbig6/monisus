@@ -7,11 +7,22 @@ import { useSearchParams } from "next/navigation"
 import { DatasetSelector } from "@/components/explorer/dataset-selector"
 import { QueryResult } from "@/components/explorer/query-result"
 import {
+  ExplorationTabs,
+  type ExplorationMode,
+} from "@/components/explorer/exploration-tabs"
+import {
+  ExplorationConfig,
+  type ExplorationRequest,
+} from "@/components/explorer/exploration-config"
+import { AiAgentTab } from "@/components/explorer/ai-agent-tab"
+import {
   listDatasets,
   getDataset,
   DatasetListItem,
+  DatasetColumn,
 } from "@/lib/api/datasets"
 import { executeQuery } from "@/lib/api/queries"
+import { generateExplorationSql } from "@/lib/explorer/sql"
 import { ApiError } from "@/lib/api"
 import { getAnalysis } from "@/lib/storage/analyses"
 
@@ -23,8 +34,6 @@ const SqlEditor = dynamic(
   { ssr: false }
 )
 
-const DEFAULT_SQL = ""
-
 function ExplorarContent() {
   const searchParams = useSearchParams()
   const analysisId = searchParams.get("analysisId")
@@ -34,7 +43,12 @@ function ExplorarContent() {
   const [datasetsError, setDatasetsError] = useState<string | null>(null)
 
   const [selectedDataset, setSelectedDataset] = useState<DatasetListItem | null>(null)
-  const [sql, setSql] = useState(DEFAULT_SQL)
+  const [datasetColumns, setDatasetColumns] = useState<DatasetColumn[]>([])
+
+  const [mode, setMode] = useState<ExplorationMode>("builder")
+
+  const [manualSql, setManualSql] = useState("")
+  const [generatedSql, setGeneratedSql] = useState<string | null>(null)
 
   const [result, setResult] = useState<Record<string, unknown>[] | null>(null)
   const [executing, setExecuting] = useState(false)
@@ -69,7 +83,10 @@ function ExplorarContent() {
     analysisLoadedRef.current = true
 
     requestAnimationFrame(() => {
-      setSql(analysis.sql)
+      if (analysis.sql) {
+        setManualSql(analysis.sql)
+        setMode("sql")
+      }
       if (datasets.length > 0 && analysis.databaseId) {
         const match = datasets.find((ds) => ds.database.id === analysis.databaseId)
         if (match) {
@@ -81,22 +98,21 @@ function ExplorarContent() {
 
   async function handleSelectDataset(dataset: DatasetListItem) {
     setSelectedDataset(dataset)
+    setResult(null)
+    setGeneratedSql(null)
+    setExecuteError(null)
 
     try {
       const detail = await getDataset(dataset.id)
-      if (detail.database?.id) {
-        const schema = detail.schema || "public"
-        setSql(
-          `SELECT *\nFROM ${dataset.table_name}\nWHERE schema = '${schema}'\nLIMIT 100;`
-        )
-      }
+      const columns = (detail as unknown as { columns?: DatasetColumn[] }).columns ?? []
+      setDatasetColumns(columns)
     } catch {
-      setSql(`SELECT *\nFROM ${dataset.table_name}\nLIMIT 100;`)
+      setDatasetColumns(dataset.columns ?? [])
     }
   }
 
-  async function handleExecute() {
-    if (!selectedDataset) return
+  async function handleExecuteQuery(sqlToExecute: string) {
+    if (!selectedDataset || !sqlToExecute.trim()) return
 
     setExecuting(true)
     setExecuteError(null)
@@ -105,7 +121,7 @@ function ExplorarContent() {
     try {
       const response = await executeQuery({
         database_id: selectedDataset.database.id,
-        sql,
+        sql: sqlToExecute,
         db_schema: selectedDataset.schema || undefined,
       })
 
@@ -125,6 +141,31 @@ function ExplorarContent() {
     }
   }
 
+  function handleSqlExecute() {
+    setGeneratedSql(null)
+    handleExecuteQuery(manualSql)
+  }
+
+  function handleBuilderExecute(config: ExplorationRequest) {
+    if (!selectedDataset) return
+
+    try {
+      const sql = generateExplorationSql(
+        config,
+        selectedDataset.table_name,
+        datasetColumns
+      )
+      setGeneratedSql(sql)
+      handleExecuteQuery(sql)
+    } catch (err) {
+      setExecuteError(
+        err instanceof Error ? err.message : "Erro ao gerar SQL."
+      )
+    }
+  }
+
+  const activeSql = generatedSql ?? manualSql
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -133,7 +174,7 @@ function ExplorarContent() {
           Explorar dados
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Consulte e analise os dados disponíveis no MoniSUS.
+          Consulte, analise e explore os dados disponíveis no MoniSUS.
         </p>
       </section>
 
@@ -145,9 +186,9 @@ function ExplorarContent() {
               <Database size={20} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Conjuntos de dados</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Conjunto de dados</h2>
               <p className="text-xs text-slate-500">
-                Selecione o conjunto de dados para consulta.
+                Selecione o conjunto de dados para análise.
               </p>
             </div>
           </div>
@@ -167,50 +208,64 @@ function ExplorarContent() {
               />
             )}
           </div>
+        </div>
+      </section>
 
-          {selectedDataset && selectedDataset.columns?.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-medium text-slate-500">
-                Colunas disponíveis:
+      {/* Tabs */}
+      {selectedDataset && (
+        <section className="mt-6">
+          <ExplorationTabs mode={mode} onModeChange={setMode} />
+        </section>
+      )}
+
+      {/* Tab content */}
+      {selectedDataset && (
+        <section className="mt-6">
+          {mode === "sql" && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Consulta SQL
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Escreva sua consulta SQL abaixo. Use Ctrl+Enter para executar.
               </p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {selectedDataset.columns.map((col) => (
-                  <span
-                    key={col.column_name}
-                    className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
-                  >
-                    {col.column_name}
-                  </span>
-                ))}
+
+              <div className="mt-4">
+                <SqlEditor
+                  value={manualSql}
+                  onChange={setManualSql}
+                  onExecute={handleSqlExecute}
+                  loading={executing}
+                  datasets={datasets}
+                  columns={datasetColumns}
+                />
               </div>
             </div>
           )}
-        </div>
-      </section>
 
-      {/* SQL Editor */}
-      <section className="mt-6">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Consulta SQL
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Escreva sua consulta SQL abaixo. Use Ctrl+Enter para executar.
-          </p>
+          {mode === "ai" && <AiAgentTab />}
 
-          <div className="mt-4">
-            <SqlEditor
-              value={sql}
-              onChange={setSql}
-              onExecute={handleExecute}
+          {mode === "builder" && (
+            <ExplorationConfig
+              columns={datasetColumns}
+              onExecute={handleBuilderExecute}
               loading={executing}
-              disabled={!selectedDataset}
-              datasets={datasets}
-              columns={selectedDataset?.columns ?? []}
             />
+          )}
+        </section>
+      )}
+
+      {/* Generated SQL preview (builder mode only) */}
+      {generatedSql && (
+        <section className="mt-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-medium text-slate-500 mb-2">SQL gerado:</p>
+            <pre className="text-xs text-slate-700 bg-slate-50 rounded-lg p-3 overflow-x-auto">
+              {generatedSql}
+            </pre>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Result */}
       <section className="mt-6">
@@ -222,7 +277,7 @@ function ExplorarContent() {
               data={result}
               loading={executing}
               error={executeError}
-              sql={sql}
+              sql={activeSql}
               databaseId={selectedDataset?.database.id}
               dbSchema={selectedDataset?.schema ?? null}
               datasetId={selectedDataset?.id ?? null}

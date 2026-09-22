@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_token
@@ -115,3 +115,39 @@ async def get_source_datasets(
         return await superset_sources.get_database_datasets(source_id)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{source_id}/schemas")
+async def get_source_schemas(
+    source_id: int,
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
+    try:
+        return await superset_sources.get_database_schemas(source_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{source_id}/tables")
+async def get_source_tables(
+    source_id: int,
+    schema: str = Query(..., min_length=1),
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
+    try:
+        return await superset_sources.get_database_tables(source_id, schema)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{source_id}/table-metadata")
+async def get_source_table_metadata(
+    source_id: int,
+    schema: str = Query(..., min_length=1),
+    table: str = Query(..., min_length=1),
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
+    try:
+        return await superset_sources.get_table_metadata(source_id, schema, table)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

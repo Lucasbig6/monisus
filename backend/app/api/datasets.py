@@ -3,11 +3,19 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_token
 from app.superset import datasets as superset_datasets
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
+
+
+class CreateDatasetRequest(BaseModel):
+    database_id: int
+    table_name: str
+    table_schema: str | None = None
+    description: str | None = None
 
 
 @router.get("")
@@ -62,3 +70,21 @@ async def refresh_columns(
         return await superset_datasets.refresh_columns(dataset_id)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("", status_code=201)
+async def create_dataset(
+    request: CreateDatasetRequest,
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
+    try:
+        return await superset_datasets.create_dataset(
+            database_id=request.database_id,
+            table_name=request.table_name,
+            schema=request.table_schema,
+            description=request.description,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

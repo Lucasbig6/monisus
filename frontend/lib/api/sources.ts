@@ -130,3 +130,54 @@ export async function testConnection(
 export async function getSourceDatasets(sourceId: number): Promise<unknown> {
   return apiGet<unknown>(`/api/sources/${sourceId}/datasets`)
 }
+
+export interface SchemasResponse {
+  schemas: string[]
+}
+
+export interface TableItem {
+  name: string
+  type: string
+}
+
+export interface TablesResponse {
+  schema: string
+  tables: TableItem[]
+}
+
+export interface TableColumn {
+  name: string
+  type: string
+  long_type: string
+  keys: string[]
+}
+
+export interface TableMetadataResponse {
+  table: string
+  schema: string
+  columns: TableColumn[]
+  select_star: string
+}
+
+export async function getSourceSchemas(sourceId: number): Promise<SchemasResponse> {
+  return apiGet<SchemasResponse>(`/api/sources/${sourceId}/schemas`)
+}
+
+export async function getSourceTables(
+  sourceId: number,
+  schema: string
+): Promise<TablesResponse> {
+  return apiGet<TablesResponse>(
+    `/api/sources/${sourceId}/tables?schema=${encodeURIComponent(schema)}`
+  )
+}
+
+export async function getTableMetadata(
+  sourceId: number,
+  schema: string,
+  table: string
+): Promise<TableMetadataResponse> {
+  return apiGet<TableMetadataResponse>(
+    `/api/sources/${sourceId}/table-metadata?schema=${encodeURIComponent(schema)}&table=${encodeURIComponent(table)}`
+  )
+}

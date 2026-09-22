@@ -162,3 +162,51 @@ async def get_database_datasets(database_id: int) -> dict[str, Any]:
         },
     )
     return response
+
+
+async def get_database_schemas(database_id: int) -> dict[str, Any]:
+    """Lista schemas de um database via Superset API."""
+    response = await superset_client.get(
+        f"/api/v1/database/{database_id}/schemas/",
+    )
+    schemas = response.get("result", [])
+    return {"schemas": schemas}
+
+
+async def get_database_tables(database_id: int, schema: str) -> dict[str, Any]:
+    """Lista tabelas de um schema via Superset API."""
+    response = await superset_client.get(
+        f"/api/v1/database/{database_id}/tables/",
+        params={"q": f"(schema_name:'{schema}')"},
+    )
+    raw_tables = response.get("result", [])
+    tables = [
+        {"name": t.get("value", ""), "type": t.get("type", "table")}
+        for t in raw_tables
+        if t.get("value")
+    ]
+    return {"schema": schema, "tables": tables}
+
+
+async def get_table_metadata(
+    database_id: int, schema: str, table: str
+) -> dict[str, Any]:
+    """Obtém metadados das colunas de uma tabela via Superset API."""
+    response = await superset_client.get(
+        f"/api/v1/database/{database_id}/table_metadata/",
+        params={"name": table, "schema": schema},
+    )
+    columns = []
+    for col in response.get("columns", []):
+        columns.append({
+            "name": col.get("name", ""),
+            "type": col.get("type", ""),
+            "long_type": col.get("longType", ""),
+            "keys": col.get("keys", []),
+        })
+    return {
+        "table": table,
+        "schema": schema,
+        "columns": columns,
+        "select_star": response.get("selectStar", ""),
+    }

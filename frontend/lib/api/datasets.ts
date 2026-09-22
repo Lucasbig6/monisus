@@ -1,4 +1,4 @@
-import { apiGet } from "../api"
+import { apiGet, apiPost } from "../api"
 
 export interface DatasetColumn {
   column_name: string
@@ -49,4 +49,15 @@ export async function getDistinctValues(
   return apiGet<DistinctValuesResponse>(
     `/api/datasets/${datasetId}/distinct/${encodeURIComponent(columnName)}`
   )
+}
+
+export interface CreateDatasetRequest {
+  database_id: number
+  table_name: string
+  table_schema?: string
+  description?: string
+}
+
+export async function createDataset(data: CreateDatasetRequest): Promise<unknown> {
+  return apiPost<unknown>("/api/datasets", data)
 }

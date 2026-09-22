@@ -39,11 +39,6 @@ const navigation = [
     icon: Database,
   },
   {
-    name: "Indicadores",
-    href: "/indicadores",
-    icon: Activity,
-  },
-  {
     name: "Análises",
     href: "/analises",
     icon: FileChartColumn,

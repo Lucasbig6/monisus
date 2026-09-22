@@ -28,12 +28,6 @@ const quickActions = [
     icon: Database,
   },
   {
-    title: "Indicadores",
-    description: "Consulte indicadores e métricas do SUS.",
-    href: "/indicadores",
-    icon: Activity,
-  },
-  {
     title: "Análises",
     description: "Crie e consulte análises personalizadas.",
     href: "/analises",
@@ -121,42 +115,6 @@ export default function Home() {
               </Link>
             )
           })}
-        </div>
-      </section>
-
-      {/* Comece por aqui */}
-      <section className="mt-10">
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="flex flex-col sm:flex-row items-start gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-              <Activity size={20} />
-            </div>
-
-            <div className="w-full">
-              <h2 className="text-base font-semibold text-slate-900">
-                Comece por aqui
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Escolha um dashboard ou explore um conjunto de dados,
-                encontre informações relevantes e construa sua análise.
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
-                <span className="rounded-full bg-slate-100 px-3 py-1.5">
-                  01 · Escolha os dados
-                </span>
-
-                <span className="rounded-full bg-slate-100 px-3 py-1.5">
-                  02 · Explore
-                </span>
-
-                <span className="rounded-full bg-slate-100 px-3 py-1.5">
-                  03 · Analise
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
     </div>

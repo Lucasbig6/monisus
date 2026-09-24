@@ -59,7 +59,7 @@ class SupersetClient:
         try:
             response = await self._client.post(
                 "/api/v1/security/refresh",
-                json={"refresh_token": self._refresh_token},
+                headers={"Authorization": f"Bearer {self._refresh_token}"},
             )
             response.raise_for_status()
         except httpx.HTTPStatusError:
@@ -90,7 +90,7 @@ class SupersetClient:
         """Refresh a user token (for user-facing auth)."""
         response = await self._client.post(
             "/api/v1/security/refresh",
-            json={"refresh_token": refresh_token},
+            headers={"Authorization": f"Bearer {refresh_token}"},
         )
         response.raise_for_status()
         return response.json()

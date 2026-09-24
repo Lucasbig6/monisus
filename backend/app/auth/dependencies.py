@@ -2,16 +2,37 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import jwt
 from fastapi import Header, HTTPException
 
-from app.superset.client import superset_client
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
+def validate_access_token(token: str) -> dict:
+    """Validate a Superset-issued JWT locally (signature, expiry, type)."""
+    try:
+        return jwt.decode(
+            token,
+            settings.superset_secret_key,
+            algorithms=["HS256"],
+            options={"verify_exp": True},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Token expirado",
+        ) from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Token inválido",
+        ) from exc
+
+
 async def get_current_token(authorization: str = Header(...)) -> str:
-    """Extract Bearer token from Authorization header and validate it against Superset."""
+    """Extract Bearer token from Authorization header and validate it locally."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -24,30 +45,11 @@ async def get_current_token(authorization: str = Header(...)) -> str:
             detail="Token de autorização vazio",
         )
 
-    try:
-        await superset_client.get_current_user(token)
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code in (401, 403):
-            raise HTTPException(
-                status_code=401,
-                detail="Token inválido ou expirado",
-            ) from exc
-        logger.error("Erro inesperado ao validar token: %s", exc.response.status_code)
+    claims = validate_access_token(token)
+    if claims.get("type") != "access":
         raise HTTPException(
-            status_code=502,
-            detail="Erro ao comunicar com o serviço de autenticação",
-        ) from exc
-    except httpx.ConnectError:
-        logger.error("Superset indisponível para validação de token")
-        raise HTTPException(
-            status_code=503,
-            detail="Serviço de autenticação indisponível",
-        ) from None
-    except Exception:
-        logger.exception("Erro inesperado na validação do token")
-        raise HTTPException(
-            status_code=502,
-            detail="Erro interno na validação do token",
-        ) from None
+            status_code=401,
+            detail="Token de tipo inválido",
+        )
 
     return token

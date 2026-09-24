@@ -1,5 +1,8 @@
+"use client"
+
 import { redirect } from "next/navigation"
+import { isAuthenticated } from "@/lib/auth"
 
 export default function RootPage() {
-  redirect("/login")
+  redirect(isAuthenticated() ? "/inicio" : "/login")
 }

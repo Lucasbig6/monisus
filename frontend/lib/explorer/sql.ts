@@ -17,6 +17,10 @@ export function isValidIdentifier(name: string): boolean {
   return IDENTIFIER_PATTERN.test(name)
 }
 
+export function quoteIdentifier(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`
+}
+
 export function validateIdentifiers(
   config: ExplorationRequest,
   columns: DatasetColumn[]
@@ -52,9 +56,12 @@ export function generateExplorationSql(
     throw new Error(validationError)
   }
 
-  if (!isValidIdentifier(tableName)) {
-    throw new Error(`Nome de tabela inválido: "${tableName}"`)
+  if (!tableName.trim()) {
+    throw new Error("Nome de tabela vazio.")
   }
+
+  const dim = quoteIdentifier(config.dimension)
+  const from = quoteIdentifier(tableName)
 
   let aggExpression: string
   let metricAlias: string
@@ -63,25 +70,27 @@ export function generateExplorationSql(
     aggExpression = "COUNT(*)"
     metricAlias = "total_registros"
   } else if (config.aggregation === "COUNT") {
-    aggExpression = `COUNT(${config.metric})`
+    aggExpression = `COUNT(${quoteIdentifier(config.metric)})`
     metricAlias = `count_${config.metric}`
   } else {
-    aggExpression = `${config.aggregation}(${config.metric})`
+    aggExpression = `${config.aggregation}(${quoteIdentifier(config.metric)})`
     metricAlias = `${config.aggregation.toLowerCase()}_${config.metric}`
   }
 
+  const alias = quoteIdentifier(metricAlias)
+
   return [
-    `SELECT ${config.dimension}, ${aggExpression} AS ${metricAlias}`,
-    `FROM ${tableName}`,
-    `GROUP BY ${config.dimension}`,
-    `ORDER BY ${metricAlias} DESC`,
+    `SELECT ${dim}, ${aggExpression} AS ${alias}`,
+    `FROM ${from}`,
+    `GROUP BY ${dim}`,
+    `ORDER BY ${alias} DESC`,
     `LIMIT 100`,
   ].join("\n")
 }
 
 export function generatePreviewSql(tableName: string): string {
-  if (!isValidIdentifier(tableName)) {
-    throw new Error(`Nome de tabela inválido: "${tableName}"`)
+  if (!tableName.trim()) {
+    throw new Error("Nome de tabela vazio.")
   }
-  return `SELECT *\nFROM ${tableName}\nLIMIT 100`
+  return `SELECT *\nFROM ${quoteIdentifier(tableName)}\nLIMIT 100`
 }

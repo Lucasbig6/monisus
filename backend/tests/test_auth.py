@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import httpx
+import jwt
 import pytest
+
+from app.core.config import settings
+from tests.conftest import make_token
 
 
 @pytest.mark.asyncio
@@ -98,17 +102,12 @@ async def test_refresh_no_internal_exception_leaked(client, mock_superset_client
 
 
 @pytest.mark.asyncio
-async def test_me_with_valid_token(client, mock_superset_client):
-    mock_superset_client.get_current_user.return_value = {
-        "username": "admin",
-        "first_name": "Admin",
-    }
-    response = await client.get(
-        "/api/auth/me",
-        headers={"Authorization": "Bearer valid_token"},
-    )
+async def test_me_with_valid_token(client, auth_headers):
+    response = await client.get("/api/auth/me", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json()["username"] == "admin"
+    data = response.json()
+    assert data["sub"] == "1"
+    assert data["type"] == "access"
 
 
 @pytest.mark.asyncio
@@ -118,12 +117,7 @@ async def test_me_without_token(client):
 
 
 @pytest.mark.asyncio
-async def test_me_with_invalid_token(client, mock_superset_client):
-    mock_superset_client.get_current_user.side_effect = httpx.HTTPStatusError(
-        message="Unauthorized",
-        request=httpx.Request("GET", "http://test"),
-        response=httpx.Response(status_code=401),
-    )
+async def test_me_with_invalid_token(client):
     response = await client.get(
         "/api/auth/me",
         headers={"Authorization": "Bearer invalid_token"},
@@ -133,18 +127,44 @@ async def test_me_with_invalid_token(client, mock_superset_client):
 
 
 @pytest.mark.asyncio
-async def test_me_with_forbidden_token(client, mock_superset_client):
-    mock_superset_client.get_current_user.side_effect = httpx.HTTPStatusError(
-        message="Forbidden",
-        request=httpx.Request("GET", "http://test"),
-        response=httpx.Response(status_code=403),
+async def test_me_with_wrong_signature(client):
+    token = jwt.encode(
+        {"sub": "1", "type": "access", "exp": 4102444800},
+        "wrong-secret",
+        algorithm="HS256",
     )
     response = await client.get(
         "/api/auth/me",
-        headers={"Authorization": "Bearer forbidden_token"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 401
     assert "Token inválido" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_me_with_expired_token(client):
+    token = jwt.encode(
+        {"sub": "1", "type": "access", "exp": 1000000000},
+        settings.superset_secret_key,
+        algorithm="HS256",
+    )
+    response = await client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+    assert "expirado" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_me_with_refresh_token(client):
+    token = make_token(type="refresh")
+    response = await client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+    assert "tipo" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
@@ -165,26 +185,3 @@ async def test_me_with_empty_token(client):
     )
     assert response.status_code == 401
     assert "vazio" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_me_superset_unavailable(client, mock_superset_client):
-    mock_superset_client.get_current_user.side_effect = httpx.ConnectError(
-        "Connection refused"
-    )
-    response = await client.get(
-        "/api/auth/me",
-        headers={"Authorization": "Bearer any_token"},
-    )
-    assert response.status_code == 503
-
-
-@pytest.mark.asyncio
-async def test_me_no_internal_exception_leaked(client, mock_superset_client):
-    mock_superset_client.get_current_user.side_effect = RuntimeError("stack trace here")
-    response = await client.get(
-        "/api/auth/me",
-        headers={"Authorization": "Bearer any_token"},
-    )
-    assert response.status_code == 502
-    assert "stack trace here" not in response.json()["detail"]

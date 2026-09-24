@@ -321,9 +321,9 @@ function ExplorarContent() {
         <section className="mt-6">
           {mode === "sql" && (
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">SQL</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Consulta SQL</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Consulte o dataset selecionado com SELECT ou WITH. Use Ctrl+Enter
+                Consulte o dataset selecionado. Use Ctrl+Enter
                 para executar. O resultado e o salvamento de dataset funcionam da
                 mesma forma nas abas SQL e Visual.
               </p>

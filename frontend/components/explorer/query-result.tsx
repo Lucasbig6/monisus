@@ -35,10 +35,15 @@ interface QueryResultProps {
 }
 
 export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, datasetId, onDatasetPublished }: QueryResultProps) {
-  const [pagination, setPagination] = useState({ data, page: 0 })
+  const [page, setPage] = useState(0)
+  const [prevData, setPrevData] = useState(data)
   const [viewMode, setViewMode] = useState<"table" | "chart">("table")
   const containerRef = useRef<HTMLDivElement>(null)
-  const page = pagination.data === data ? pagination.page : 0
+
+  if (prevData !== data) {
+    setPrevData(data)
+    setPage(0)
+  }
 
   const [chartType, setChartType] = useState<Exclude<ChartType, "table">>("bar")
   const [dimension, setDimension] = useState<string | null>(null)
@@ -83,7 +88,7 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
   const isChartMode = viewMode === "chart"
 
   function goToPage(p: number) {
-    setPagination((prev) => ({ ...prev, page: p }))
+    setPage(p)
     containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
@@ -178,6 +183,25 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
   }
 
   const pageNumbers = getPageNumbers()
+
+  function renderPageNumbers() {
+    return pageNumbers.map((p, i) =>
+      p === "..." ? (
+        <span key={`dots-${i}`} className="px-1 text-xs text-slate-400">
+          ...
+        </span>
+      ) : (
+        <Button
+          key={p}
+          variant={p === page + 1 ? "default" : "outline"}
+          size="icon-xs"
+          onClick={() => goToPage(p - 1)}
+        >
+          {p}
+        </Button>
+      )
+    )
+  }
 
   return (
     <div ref={containerRef} className="rounded-lg border border-slate-200 bg-white">
@@ -317,80 +341,47 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
           <span className="text-xs text-slate-500">
             {data.length} registro{data.length !== 1 ? "s" : ""}
           </span>
-          <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
+
+          {/* Mobile: setas + números */}
+          <div className="flex sm:hidden items-center gap-1 w-full justify-end">
             <Button
               variant="outline"
               size="icon-xs"
               onClick={() => goToPage(page - 1)}
               disabled={page === 0}
-              className="sm:hidden"
             >
               <ChevronLeft size={14} />
             </Button>
-
-            {pageNumbers.map((p, i) =>
-              p === "..." ? (
-                <span key={`dots-${i}`} className="px-1 text-xs text-slate-400">
-                  ...
-                </span>
-              ) : (
-                <Button
-                  key={p}
-                  variant={p === page + 1 ? "default" : "outline"}
-                  size="icon-xs"
-                  onClick={() => goToPage(p - 1)}
-                >
-                  {p}
-                </Button>
-              )
-            )}
-
+            {renderPageNumbers()}
             <Button
               variant="outline"
               size="icon-xs"
               onClick={() => goToPage(page + 1)}
               disabled={page === totalPages - 1}
-              className="sm:hidden"
             >
               <ChevronRight size={14} />
             </Button>
+          </div>
 
-            <div className="hidden sm:flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="icon-xs"
-                onClick={() => goToPage(page - 1)}
-                disabled={page === 0}
-              >
-                <ChevronLeft size={14} />
-              </Button>
-
-              {pageNumbers.map((p, i) =>
-                p === "..." ? (
-                  <span key={`dots-${i}`} className="px-1 text-xs text-slate-400">
-                    ...
-                  </span>
-                ) : (
-                  <Button
-                    key={p}
-                    variant={p === page + 1 ? "default" : "outline"}
-                    size="icon-xs"
-                    onClick={() => goToPage(p - 1)}
-                  >
-                    {p}
-                  </Button>
-                )
-              )}
-
-              <Button
-                variant="outline"
-                size="icon-xs"
-                onClick={() => goToPage(page + 1)}
-                disabled={page === totalPages - 1}
-              >
-                <ChevronRight size={14} />
-              </Button>
-            </div>
+          {/* Desktop: setas + números */}
+          <div className="hidden sm:flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-xs"
+              onClick={() => goToPage(page - 1)}
+              disabled={page === 0}
+            >
+              <ChevronLeft size={14} />
+            </Button>
+            {renderPageNumbers()}
+            <Button
+              variant="outline"
+              size="icon-xs"
+              onClick={() => goToPage(page + 1)}
+              disabled={page === totalPages - 1}
+            >
+              <ChevronRight size={14} />
+            </Button>
           </div>
         </div>
       )}

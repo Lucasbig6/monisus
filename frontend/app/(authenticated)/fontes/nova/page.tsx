@@ -117,7 +117,7 @@ function PostgresForm({ onBack }: { onBack: () => void }) {
   const router = useRouter()
 
   const [databaseName, setDatabaseName] = useState("")
-  const [host, setHost] = useState("monisus-postgres-demo")
+  const [host, setHost] = useState("db")
   const [port, setPort] = useState("5432")
   const [database, setDatabase] = useState("")
   const [username, setUsername] = useState("")

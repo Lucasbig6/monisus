@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_token
 from app.superset import queries as superset_queries
+from app.superset.errors import extract_superset_error
 from app.superset.filters import (
     FilterClause,
     build_where_clause,
@@ -15,6 +17,26 @@ from app.superset.filters import (
 )
 
 router = APIRouter(prefix="/queries", tags=["Queries"])
+
+
+def _error_response(e: Exception) -> JSONResponse:
+    if isinstance(e, httpx.HTTPStatusError):
+        detail = extract_superset_error(e) or "Erro ao executar a consulta no Superset."
+        return JSONResponse(
+            status_code=502,
+            content={"status": "error", "message": detail, "detail": detail},
+        )
+    if isinstance(e, httpx.HTTPError):
+        msg = "Não foi possível conectar ao Superset."
+        return JSONResponse(
+            status_code=502,
+            content={"status": "error", "message": msg, "detail": msg},
+        )
+    msg = str(e) or "Erro interno ao executar a consulta."
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "message": msg, "detail": msg},
+    )
 
 
 class ExecuteQueryRequest(BaseModel):
@@ -37,8 +59,10 @@ async def execute_query(
     except ValueError as e:
         return JSONResponse(
             status_code=400,
-            content={"status": "error", "message": str(e)},
+            content={"status": "error", "message": str(e), "detail": str(e)},
         )
+    except Exception as e:
+        return _error_response(e)
 
 
 class ExecuteFilteredQueryRequest(BaseModel):
@@ -74,8 +98,10 @@ async def execute_filtered_query(
     except ValueError as e:
         return JSONResponse(
             status_code=400,
-            content={"status": "error", "message": str(e)},
+            content={"status": "error", "message": str(e), "detail": str(e)},
         )
+    except Exception as e:
+        return _error_response(e)
 
 
 class FormatSqlRequest(BaseModel):

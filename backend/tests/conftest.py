@@ -2,10 +2,25 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import settings
 from app.main import app
+
+
+def make_token(**claims) -> str:
+    payload = {
+        "sub": "1",
+        "type": "access",
+        "fresh": True,
+        "iat": 1790000000,
+        "nbf": 1790000000,
+        "exp": 4102444800,
+        **claims,
+    }
+    return jwt.encode(payload, settings.superset_secret_key, algorithm="HS256")
 
 
 @pytest.fixture
@@ -34,7 +49,7 @@ def mock_superset_client():
 @pytest.fixture
 def auth_headers() -> dict[str, str]:
     """Valid authorization headers."""
-    return {"Authorization": "Bearer test_token"}
+    return {"Authorization": f"Bearer {make_token()}"}
 
 
 @pytest.fixture
@@ -42,7 +57,6 @@ async def client(mock_superset_client):
     """Async test client with mocked SupersetClient."""
     patches = [
         patch("app.main.superset_client", mock_superset_client),
-        patch("app.auth.dependencies.superset_client", mock_superset_client),
         patch("app.superset.client.superset_client", mock_superset_client),
         patch("app.superset.dashboards.superset_client", mock_superset_client),
         patch("app.superset.charts.superset_client", mock_superset_client),

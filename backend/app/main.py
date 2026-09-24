@@ -26,8 +26,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="MoniSUS API",
-    description="API principal da plataforma MoniSUS - Inteligência e análise de dados do SUS",
+    title="Saude360 - API",
+    description="API principal da plataforma Saude360 - Inteligência e análise de dados do SUS",
     version="0.1.0",
     lifespan=lifespan,
 )

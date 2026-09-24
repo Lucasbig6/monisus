@@ -23,7 +23,7 @@ from typing import Any
 
 SUPERSET_URL = "http://localhost:8088"
 ADMIN_USER = "admin"
-ADMIN_PASS = "admin123"
+ADMIN_PASS = "admin"
 
 PG_HOST = "db"
 PG_PORT = 5432

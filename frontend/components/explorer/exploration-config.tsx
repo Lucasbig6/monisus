@@ -1,16 +1,7 @@
 "use client"
 
 import React, { useCallback, useMemo, useRef, useState } from "react"
-import {
-  BarChart3,
-  GripVertical,
-  Hash,
-  LineChart,
-  Play,
-  Table2,
-  Type,
-  X,
-} from "lucide-react"
+import { BarChart3, LineChart, Play, Table2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,13 +9,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
 import type { DatasetColumn } from "@/lib/api/datasets"
 import type {
   AggregationType,
   ChartVisualization,
   ExplorationRequest,
 } from "@/lib/explorer/sql"
+import { DraggableField } from "./draggable-field"
+import { FieldDropSlot } from "./field-drop-slot"
 
 export type { AggregationType, ChartVisualization, ExplorationRequest }
 
@@ -73,10 +65,6 @@ function isMetricColumn(col: DatasetColumn): boolean {
   )
 }
 
-function getFieldIcon(col: DatasetColumn) {
-  return isMetricColumn(col) ? Hash : Type
-}
-
 type SlotType = "dimension" | "metric"
 
 const AGGREGATION_OPTIONS: { value: AggregationType; label: string }[] = [
@@ -109,16 +97,6 @@ export function ExplorationConfig({
   const [dragOverSlot, setDragOverSlot] = useState<SlotType | null>(null)
   const [dragError, setDragError] = useState<SlotType | null>(null)
   const dragErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const dimensionColumns = useMemo(
-    () => columns.filter(isDimensionColumn),
-    [columns]
-  )
-
-  const metricColumns = useMemo(
-    () => columns.filter(isMetricColumn),
-    [columns]
-  )
 
   const usedFields = useMemo(() => {
     const set = new Set<string>()
@@ -178,14 +156,17 @@ export function ExplorationConfig({
     }
   }
 
-  function handleFieldClick(col: DatasetColumn) {
+  function handleFieldClick(columnName: string) {
     if (disabled) return
-    if (usedFields.has(col.column_name)) return
+    if (usedFields.has(columnName)) return
+
+    const col = columns.find((c) => c.column_name === columnName)
+    if (!col) return
 
     if (isDimensionColumn(col) && !dimension) {
-      setDimension(col.column_name)
+      setDimension(columnName)
     } else if (isMetricColumn(col) && !metric) {
-      setMetric(col.column_name)
+      setMetric(columnName)
     }
   }
 
@@ -208,40 +189,18 @@ export function ExplorationConfig({
         </CardHeader>
         <CardContent className="space-y-1.5 max-h-[500px] overflow-y-auto">
           {columns.map((col) => {
-            const Icon = getFieldIcon(col)
             const isUsed = usedFields.has(col.column_name)
+            const kind = isMetricColumn(col) ? "metric" : "dimension"
             return (
-              <div
+              <DraggableField
                 key={col.column_name}
-                draggable={!isUsed && !disabled}
-                onDragStart={(e) => handleDragStart(e, col.column_name)}
-                onClick={() => handleFieldClick(col)}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-                  isUsed
-                    ? "border-slate-100 bg-slate-50 opacity-50 cursor-default"
-                    : "border-slate-200 bg-white cursor-grab active:cursor-grabbing hover:border-slate-300 hover:bg-slate-50",
-                  disabled && "pointer-events-none opacity-50"
-                )}
-              >
-                <GripVertical
-                  size={14}
-                  className={cn(
-                    "shrink-0",
-                    isUsed ? "text-slate-300" : "text-slate-400"
-                  )}
-                />
-                <Icon
-                  size={14}
-                  className={cn(
-                    "shrink-0",
-                    isMetricColumn(col) ? "text-blue-500" : "text-slate-500"
-                  )}
-                />
-                <span className="truncate text-slate-700">
-                  {col.column_name}
-                </span>
-              </div>
+                name={col.column_name}
+                kind={kind}
+                isUsed={isUsed}
+                disabled={disabled}
+                onDragStart={handleDragStart}
+                onClick={handleFieldClick}
+              />
             )
           })}
         </CardContent>
@@ -262,15 +221,14 @@ export function ExplorationConfig({
             <span className="mb-1.5 block text-xs font-medium text-slate-600">
               Dimensão
             </span>
-            <DropSlot
-              slot="dimension"
-              value={dimension}
+            <FieldDropSlot
+              value={dimension || null}
               label="Arraste um campo categórico ou temporal aqui"
               dragOver={dragOverSlot === "dimension"}
               error={dragError === "dimension"}
-              onDragOver={handleDragOver}
+              onDragOver={(e) => handleDragOver(e, "dimension", true)}
               onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
+              onDrop={(e) => handleDrop(e, "dimension")}
               onRemove={() => handleRemoveFromSlot("dimension")}
             />
           </div>
@@ -280,15 +238,14 @@ export function ExplorationConfig({
             <span className="mb-1.5 block text-xs font-medium text-slate-600">
               Métrica
             </span>
-            <DropSlot
-              slot="metric"
-              value={metric}
+            <FieldDropSlot
+              value={metric || null}
               label="Arraste um campo numérico aqui"
               dragOver={dragOverSlot === "metric"}
               error={dragError === "metric"}
-              onDragOver={handleDragOver}
+              onDragOver={(e) => handleDragOver(e, "metric", true)}
               onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
+              onDrop={(e) => handleDrop(e, "metric")}
               onRemove={() => handleRemoveFromSlot("metric")}
             />
           </div>
@@ -370,105 +327,6 @@ export function ExplorationConfig({
           </Button>
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  DropSlot                                                          */
-/* ------------------------------------------------------------------ */
-
-interface DropSlotProps {
-  slot: SlotType
-  value: string
-  label: string
-  dragOver: boolean
-  error: boolean
-  onDragOver: (
-    e: React.DragEvent,
-    slot: SlotType,
-    compatible: boolean
-  ) => void
-  onDragLeave: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent, slot: SlotType) => void
-  onRemove: () => void
-}
-
-function DropSlot({
-  slot,
-  value,
-  label,
-  dragOver,
-  error,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onRemove,
-}: DropSlotProps) {
-  const compatibleRef = useRef(false)
-
-  const handleDragOver = useCallback(
-    (e: React.DragEvent) => {
-      const columnName = e.dataTransfer.types.includes("text/plain")
-      if (!columnName) return
-
-      // We can't read data during dragover, so we rely on the parent
-      // to determine compatibility via the drop handler.
-      // For visual feedback, we always show the "compatible" state
-      // during dragover and handle rejection on drop.
-      compatibleRef.current = true
-      onDragOver(e, slot, true)
-    },
-    [onDragOver, slot]
-  )
-
-  const handleDragLeave = useCallback(
-    (e: React.DragEvent) => {
-      compatibleRef.current = false
-      onDragLeave(e)
-    },
-    [onDragLeave]
-  )
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      compatibleRef.current = false
-      onDrop(e, slot)
-    },
-    [onDrop, slot]
-  )
-
-  if (value) {
-    return (
-      <div className="flex h-10 items-center justify-between gap-2 rounded-lg border border-teal-200 bg-white px-3 text-sm text-slate-900 shadow-sm">
-        <span className="truncate font-medium">{value}</span>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          aria-label={`Remover ${value}`}
-        >
-          <X size={14} />
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={cn(
-        "flex h-10 items-center justify-center rounded-lg border-2 border-dashed px-3 text-sm transition-colors",
-        error
-          ? "border-red-300 bg-red-50 text-red-500"
-          : dragOver
-            ? "border-teal-400 bg-teal-50 text-teal-600"
-            : "border-slate-200 bg-slate-50/50 text-slate-400 hover:border-slate-300"
-      )}
-    >
-      {error ? "Tipo incompatível" : label}
     </div>
   )
 }

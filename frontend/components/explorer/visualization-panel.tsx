@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
-import { ChevronLeft } from "lucide-react"
+import React, { useCallback, useMemo, useRef, useState } from "react"
+import { BarChart3, ChevronLeft, LineChart, PieChart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -10,10 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { ChartRenderer } from "./chart-renderer"
-import {
-  ColumnSelector,
-  type ColumnSelectorOption,
-} from "./column-selector"
+import { DraggableField } from "./draggable-field"
+import { FieldDropSlot } from "./field-drop-slot"
 
 export type { ChartType } from "@/lib/types/charts"
 import type { ChartType } from "@/lib/types/charts"
@@ -36,10 +34,22 @@ interface VisualizationPanelProps {
   chartType: Exclude<ChartType, "table">
   onChartTypeChange: (value: Exclude<ChartType, "table">) => void
   dimension: string | null
-  onDimensionChange: (value: string) => void
+  onDimensionChange: (value: string | null) => void
   metric: string | null
-  onMetricChange: (value: string) => void
+  onMetricChange: (value: string | null) => void
 }
+
+type SlotType = "dimension" | "metric"
+
+const CHART_OPTIONS: {
+  value: Exclude<ChartType, "table">
+  label: string
+  icon: typeof BarChart3
+}[] = [
+  { value: "bar", label: "Barras", icon: BarChart3 },
+  { value: "line", label: "Linha", icon: LineChart },
+  { value: "pie", label: "Pizza", icon: PieChart },
+]
 
 export function analyzeColumns(
   data: Record<string, unknown>[]
@@ -73,39 +83,25 @@ export function VisualizationPanel({
   onMetricChange,
 }: VisualizationPanelProps) {
   const columns = useMemo(() => analyzeColumns(data), [data])
-  const dimensionOptions = useMemo<ColumnSelectorOption[]>(
-    () =>
-      columns
-        .filter((column) => column.type === "categorical")
-        .map((column) => ({ value: column.name, label: column.name })),
-    [columns]
-  )
-  const metricOptions = useMemo<ColumnSelectorOption[]>(
-    () =>
-      columns
-        .filter((column) => column.type === "numeric")
-        .map((column) => ({ value: column.name, label: column.name })),
-    [columns]
-  )
 
-  const effectiveDimension = useMemo(() => {
-    if (dimension && dimensionOptions.some((o) => o.value === dimension)) {
-      return dimension
-    }
-    return dimensionOptions[0]?.value ?? null
-  }, [dimension, dimensionOptions])
+  const [dragOverSlot, setDragOverSlot] = useState<SlotType | null>(null)
+  const [dragError, setDragError] = useState<SlotType | null>(null)
+  const dragErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const effectiveMetric = useMemo(() => {
-    if (metric && metricOptions.some((o) => o.value === metric)) {
-      return metric
-    }
-    return metricOptions[0]?.value ?? null
-  }, [metric, metricOptions])
+  const usedFields = useMemo(() => {
+    const set = new Set<string>()
+    if (dimension) set.add(dimension)
+    if (metric) set.add(metric)
+    return set
+  }, [dimension, metric])
+
+  const hasDimensionOptions = columns.some((c) => c.type === "categorical")
+  const hasMetricOptions = columns.some((c) => c.type === "numeric")
 
   const hasValidMetricData =
-    effectiveMetric !== null &&
+    metric !== null &&
     data.some((row) => {
-      const value = row[effectiveMetric]
+      const value = row[metric]
       return (
         value !== null &&
         value !== undefined &&
@@ -114,13 +110,67 @@ export function VisualizationPanel({
       )
     })
 
+  const showDragError = useCallback((slot: SlotType) => {
+    setDragError(slot)
+    if (dragErrorTimer.current) clearTimeout(dragErrorTimer.current)
+    dragErrorTimer.current = setTimeout(() => setDragError(null), 1500)
+  }, [])
+
+  function handleDragStart(e: React.DragEvent, columnName: string) {
+    e.dataTransfer.setData("text/plain", columnName)
+    e.dataTransfer.effectAllowed = "copy"
+  }
+
+  function handleDragOver(e: React.DragEvent, slot: SlotType) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "copy"
+    setDragOverSlot(slot)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOverSlot(null)
+  }
+
+  function handleDrop(e: React.DragEvent, slot: SlotType) {
+    e.preventDefault()
+    setDragOverSlot(null)
+
+    const columnName = e.dataTransfer.getData("text/plain")
+    if (!columnName) return
+
+    const col = columns.find((c) => c.name === columnName)
+    if (!col) return
+
+    if (slot === "dimension" && col.type === "categorical") {
+      onDimensionChange(columnName)
+    } else if (slot === "metric" && col.type === "numeric") {
+      onMetricChange(columnName)
+    } else {
+      showDragError(slot)
+    }
+  }
+
+  function handleFieldClick(columnName: string) {
+    if (usedFields.has(columnName)) return
+
+    const col = columns.find((c) => c.name === columnName)
+    if (!col) return
+
+    if (col.type === "categorical" && !dimension) {
+      onDimensionChange(columnName)
+    } else if (col.type === "numeric" && !metric) {
+      onMetricChange(columnName)
+    }
+  }
+
   return (
     <Card className="border-slate-200 bg-white">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle>Visualização</CardTitle>
           <p className="mt-1 text-sm text-slate-500">
-            Explore os resultados da consulta em formato gráfico.
+            Arraste os campos para os slots ou clique para selecionar.
           </p>
         </div>
         <Button
@@ -136,62 +186,131 @@ export function VisualizationPanel({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <ColumnSelector
-            label="Tipo de gráfico"
-            options={[
-              { value: "bar", label: "Barras" },
-              { value: "line", label: "Linha" },
-              { value: "pie", label: "Pizza" },
-            ]}
-            value={chartType}
-            onChange={(value) => onChartTypeChange(value as Exclude<ChartType, "table">)}
-            placeholder="Selecione um gráfico"
-          />
-          <ColumnSelector
-            label="Dimensão"
-            options={dimensionOptions}
-            value={effectiveDimension}
-            onChange={onDimensionChange}
-            placeholder="Selecione uma dimensão"
-            disabled={dimensionOptions.length === 0}
-          />
-          <ColumnSelector
-            label="Métrica"
-            options={metricOptions}
-            value={effectiveMetric}
-            onChange={onMetricChange}
-            placeholder="Selecione uma métrica"
-            disabled={metricOptions.length === 0}
-          />
+        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+          {/* Fields panel */}
+          <div className="rounded-lg border border-slate-200 bg-white self-start">
+            <div className="border-b border-slate-200 px-3 py-2">
+              <span className="text-xs font-medium text-slate-600">Campos</span>
+            </div>
+            <div className="max-h-[320px] space-y-1.5 overflow-y-auto p-2">
+              {columns.length === 0 && (
+                <p className="px-2 py-3 text-xs text-slate-400">
+                  Nenhum campo disponível.
+                </p>
+              )}
+              {columns.map((col) => {
+                const isUsed = usedFields.has(col.name)
+                const kind = col.type === "numeric" ? "metric" : "dimension"
+                return (
+                  <DraggableField
+                    key={col.name}
+                    name={col.name}
+                    kind={kind}
+                    isUsed={isUsed}
+                    onDragStart={handleDragStart}
+                    onClick={handleFieldClick}
+                  />
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Config panel */}
+          <div className="space-y-4">
+            {/* Chart type buttons */}
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                Tipo de gráfico
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {CHART_OPTIONS.map((opt) => {
+                  const Icon = opt.icon
+                  const active = chartType === opt.value
+                  return (
+                    <Button
+                      key={opt.value}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => onChartTypeChange(opt.value)}
+                      className={
+                        active ? "bg-teal-600 text-white hover:bg-teal-700" : ""
+                      }
+                    >
+                      <Icon size={14} />
+                      {opt.label}
+                    </Button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Dimension slot */}
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                Dimensão
+              </span>
+              <FieldDropSlot
+                value={dimension}
+                label="Arraste um campo categórico aqui"
+                dragOver={dragOverSlot === "dimension"}
+                error={dragError === "dimension"}
+                onDragOver={(e) => handleDragOver(e, "dimension")}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, "dimension")}
+                onRemove={() => onDimensionChange(null)}
+              />
+            </div>
+
+            {/* Metric slot */}
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-slate-600">
+                Métrica
+              </span>
+              <FieldDropSlot
+                value={metric}
+                label="Arraste um campo numérico aqui"
+                dragOver={dragOverSlot === "metric"}
+                error={dragError === "metric"}
+                onDragOver={(e) => handleDragOver(e, "metric")}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, "metric")}
+                onRemove={() => onMetricChange(null)}
+              />
+            </div>
+
+            {/* Validation messages */}
+            <div className="space-y-1">
+              {!hasDimensionOptions && (
+                <p className="text-sm text-amber-700">
+                  Nenhum campo categórico para dimensão
+                </p>
+              )}
+              {!hasMetricOptions && (
+                <p className="text-sm text-amber-700">
+                  Nenhum campo numérico para métrica
+                </p>
+              )}
+              {hasDimensionOptions &&
+                hasMetricOptions &&
+                dimension &&
+                metric &&
+                !hasValidMetricData && (
+                  <p className="text-sm text-slate-500">
+                    Nenhum dado válido para visualizar
+                  </p>
+                )}
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          {dimensionOptions.length === 0 && (
-            <p className="text-sm text-amber-700">
-              Selecione uma dimensão categórica
-            </p>
-          )}
-          {metricOptions.length === 0 && (
-            <p className="text-sm text-amber-700">
-              Selecione uma métrica numérica
-            </p>
-          )}
-          {dimensionOptions.length > 0 &&
-            metricOptions.length > 0 &&
-            !hasValidMetricData && (
-              <p className="text-sm text-slate-500">
-                Nenhum dado válido para visualizar
-              </p>
-            )}
-        </div>
-
+        {/* Chart */}
         <div className="h-[400px] rounded-lg border border-slate-200 bg-slate-50/50 p-3">
           <ChartRenderer
             data={data}
             chartType={chartType}
-            dimension={effectiveDimension}
-            metric={effectiveMetric}
+            dimension={dimension}
+            metric={metric}
           />
         </div>
       </CardContent>

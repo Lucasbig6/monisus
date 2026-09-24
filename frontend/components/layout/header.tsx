@@ -67,7 +67,7 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-6">
+    <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-6">
       {/* Logo | divider | nav */}
       <div className="flex min-w-0 items-center gap-3 lg:gap-4">
         <Link
@@ -86,7 +86,7 @@ export function Header() {
         {/* Divider logo → navlinks */}
         <span
           aria-hidden="true"
-          className="hidden h-6 w-px shrink-0 bg-slate-200 md:block"
+          className="hidden h-10 w-px shrink-0 bg-slate-200 md:block"
         />
 
         {/* Desktop nav */}
@@ -102,7 +102,7 @@ export function Header() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "relative rounded-md px-3 py-5 text-sm font-medium transition-colors",
                   active
                     ? "text-teal-700"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"

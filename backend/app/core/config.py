@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     superset_base_url: str = "http://localhost:8088"
     superset_username: str = "admin"
     superset_password: str = "admin123"
+    superset_secret_key: str = "chave_secreta_monisus_ambiente_dev_123"
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     api_prefix: str = "/api"
     superset_timeout: float = 30.0

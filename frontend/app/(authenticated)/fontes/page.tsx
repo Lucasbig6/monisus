@@ -14,20 +14,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   listSources,
   deleteSource,
   getSourceTypeConfig,
   type SourceListItem,
 } from "@/lib/api/sources"
 import { ApiError } from "@/lib/api"
+import { DeleteConfirmationDialog } from "@/components/shared/delete-confirmation-dialog"
 
 const ICONS: Record<string, typeof Database> = {
   Database,
@@ -90,7 +83,7 @@ export default function FontesPage() {
               Fontes de Dados
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Conecte e gerencie as fontes utilizadas nas análises do MoniSUS.
+              Conecte e gerencie as fontes utilizadas nas análises do Saude360.
             </p>
           </div>
 
@@ -200,36 +193,15 @@ export default function FontesPage() {
       )}
 
       {/* Delete confirmation dialog */}
-      <Dialog
+      <DeleteConfirmationDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Excluir fonte</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir &ldquo;{deleteTarget?.database_name}&rdquo;?
-              Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-            >
-              Excluir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Excluir fonte"
+        itemName={deleteTarget?.database_name ?? ""}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

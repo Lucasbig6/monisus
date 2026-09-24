@@ -22,7 +22,7 @@ import {
   DatasetColumn,
 } from "@/lib/api/datasets"
 import { executeQuery } from "@/lib/api/queries"
-import { generateExplorationSql } from "@/lib/explorer/sql"
+import { generateExplorationSql, generatePreviewSql } from "@/lib/explorer/sql"
 import { ApiError } from "@/lib/api"
 import { getAnalysis } from "@/lib/storage/analyses"
 
@@ -37,6 +37,7 @@ const SqlEditor = dynamic(
 function ExplorarContent() {
   const searchParams = useSearchParams()
   const analysisId = searchParams.get("analysisId")
+  const datasetIdParam = searchParams.get("datasetId")
 
   const [datasets, setDatasets] = useState<DatasetListItem[]>([])
   const [loadingDatasets, setLoadingDatasets] = useState(true)
@@ -45,7 +46,7 @@ function ExplorarContent() {
   const [selectedDataset, setSelectedDataset] = useState<DatasetListItem | null>(null)
   const [datasetColumns, setDatasetColumns] = useState<DatasetColumn[]>([])
 
-  const [mode, setMode] = useState<ExplorationMode>("builder")
+  const [mode, setMode] = useState<ExplorationMode>("sql")
 
   const [manualSql, setManualSql] = useState("")
   const [generatedSql, setGeneratedSql] = useState<string | null>(null)
@@ -55,6 +56,7 @@ function ExplorarContent() {
   const [executeError, setExecuteError] = useState<string | null>(null)
 
   const analysisLoadedRef = useRef(false)
+  const datasetIdLoadedRef = useRef(false)
 
   useEffect(() => {
     async function load() {
@@ -74,6 +76,87 @@ function ExplorarContent() {
     load()
   }, [])
 
+  async function runPreview(dataset: DatasetListItem) {
+    let previewSql: string
+    try {
+      previewSql = generatePreviewSql(dataset.table_name)
+    } catch (err) {
+      setExecuteError(
+        err instanceof Error ? err.message : "Erro ao gerar SQL de preview."
+      )
+      return
+    }
+
+    setManualSql(previewSql)
+    setGeneratedSql(null)
+    setExecuting(true)
+    setExecuteError(null)
+    setResult(null)
+
+    try {
+      const response = await executeQuery({
+        database_id: dataset.database.id,
+        sql: previewSql,
+        db_schema: dataset.schema || undefined,
+      })
+
+      if (response.status === "error") {
+        setExecuteError(response.message || "Erro ao carregar os dados do dataset.")
+      } else {
+        setResult(response.data ?? [])
+      }
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.detail
+          : "Não foi possível carregar os dados do dataset."
+      setExecuteError(msg)
+    } finally {
+      setExecuting(false)
+    }
+  }
+
+  async function handleSelectDataset(dataset: DatasetListItem) {
+    setSelectedDataset(dataset)
+    setResult(null)
+    setGeneratedSql(null)
+    setExecuteError(null)
+    setManualSql("")
+
+    try {
+      const detail = await getDataset(dataset.id)
+      const columns = (detail as unknown as { columns?: DatasetColumn[] }).columns ?? []
+      setDatasetColumns(columns)
+    } catch {
+      setDatasetColumns(dataset.columns ?? [])
+    }
+
+    await runPreview(dataset)
+  }
+
+  useEffect(() => {
+    if (
+      !datasetIdParam ||
+      datasetIdLoadedRef.current ||
+      loadingDatasets ||
+      datasets.length === 0
+    ) {
+      return
+    }
+
+    const targetId = Number(datasetIdParam)
+    if (!Number.isFinite(targetId)) return
+
+    const match = datasets.find((ds) => ds.id === targetId)
+    if (!match) return
+
+    datasetIdLoadedRef.current = true
+    requestAnimationFrame(() => {
+      void handleSelectDataset(match)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasetIdParam, loadingDatasets, datasets])
+
   useEffect(() => {
     if (!analysisId || analysisLoadedRef.current || loadingDatasets) return
 
@@ -91,25 +174,17 @@ function ExplorarContent() {
         const match = datasets.find((ds) => ds.database.id === analysis.databaseId)
         if (match) {
           setSelectedDataset(match)
+          void getDataset(match.id)
+            .then((detail) => {
+              const columns =
+                (detail as unknown as { columns?: DatasetColumn[] }).columns ?? []
+              setDatasetColumns(columns)
+            })
+            .catch(() => setDatasetColumns(match.columns ?? []))
         }
       }
     })
   }, [analysisId, loadingDatasets, datasets])
-
-  async function handleSelectDataset(dataset: DatasetListItem) {
-    setSelectedDataset(dataset)
-    setResult(null)
-    setGeneratedSql(null)
-    setExecuteError(null)
-
-    try {
-      const detail = await getDataset(dataset.id)
-      const columns = (detail as unknown as { columns?: DatasetColumn[] }).columns ?? []
-      setDatasetColumns(columns)
-    } catch {
-      setDatasetColumns(dataset.columns ?? [])
-    }
-  }
 
   async function handleExecuteQuery(sqlToExecute: string) {
     if (!selectedDataset || !sqlToExecute.trim()) return
@@ -166,6 +241,29 @@ function ExplorarContent() {
 
   const activeSql = generatedSql ?? manualSql
 
+  async function handleDatasetPublished(publishedId?: number) {
+    try {
+      const data = await listDatasets()
+      const next = data.result ?? []
+      setDatasets(next)
+      setDatasetsError(null)
+
+      if (publishedId != null) {
+        const match = next.find((ds) => ds.id === publishedId)
+        if (match) {
+          datasetIdLoadedRef.current = true
+          await handleSelectDataset(match)
+        }
+      }
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.detail
+          : "Erro ao atualizar a lista de datasets."
+      setDatasetsError(msg)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -174,7 +272,7 @@ function ExplorarContent() {
           Explorar dados
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Consulte, analise e explore os dados disponíveis no MoniSUS.
+          Consulte, analise e explore os dados disponíveis no Saude360.
         </p>
       </section>
 
@@ -223,11 +321,11 @@ function ExplorarContent() {
         <section className="mt-6">
           {mode === "sql" && (
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Consulta SQL
-              </h2>
+              <h2 className="text-sm font-semibold text-slate-900">SQL</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Escreva sua consulta SQL abaixo. Use Ctrl+Enter para executar.
+                Consulte o dataset selecionado com SELECT ou WITH. Use Ctrl+Enter
+                para executar. O resultado e o salvamento de dataset funcionam da
+                mesma forma nas abas SQL e Visual.
               </p>
 
               <div className="mt-4">
@@ -255,7 +353,7 @@ function ExplorarContent() {
         </section>
       )}
 
-      {/* Generated SQL preview (builder mode only) */}
+      {/* Generated SQL preview (Visual mode) */}
       {generatedSql && (
         <section className="mt-6">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -281,6 +379,7 @@ function ExplorarContent() {
               databaseId={selectedDataset?.database.id}
               dbSchema={selectedDataset?.schema ?? null}
               datasetId={selectedDataset?.id ?? null}
+              onDatasetPublished={handleDatasetPublished}
             />
           </div>
         </div>

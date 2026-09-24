@@ -6,38 +6,17 @@ import {
   ArrowLeft,
   BarChart3,
   Inbox,
-  LineChart,
   Pencil,
-  PieChart,
   Search,
-  Table2,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import type { Analysis } from "@/lib/types/analysis"
+import { chartTypeLabel, chartTypeIcon } from "@/lib/types/charts"
+import { DeleteConfirmationDialog } from "@/components/shared/delete-confirmation-dialog"
+import { AddToDashboardDialog } from "@/components/dashboard/add-to-dashboard-dialog"
 import { getAnalyses, deleteAnalysis } from "@/lib/storage/analyses"
-
-const chartTypeLabel: Record<Analysis["chartType"], string> = {
-  table: "Tabela",
-  bar: "Barras",
-  line: "Linha",
-  pie: "Pizza",
-}
-
-const chartTypeIcon: Record<Analysis["chartType"], typeof Table2> = {
-  table: Table2,
-  bar: BarChart3,
-  line: LineChart,
-  pie: PieChart,
-}
 
 function formatDate(iso: string): string {
   try {
@@ -56,12 +35,128 @@ function formatDate(iso: string): string {
 export default function AnalisesPage() {
   const [analyses, setAnalyses] = useState<Analysis[]>(getAnalyses)
   const [deleteTarget, setDeleteTarget] = useState<Analysis | null>(null)
+  const [addToDashboardTarget, setAddToDashboardTarget] =
+    useState<Analysis | null>(null)
+
+  const chartItems = analyses.filter((a) => a.chartType !== "table")
+  const analysisItems = analyses.filter((a) => a.chartType === "table")
 
   function handleDelete() {
     if (!deleteTarget) return
     deleteAnalysis(deleteTarget.id)
     setAnalyses((prev) => prev.filter((a) => a.id !== deleteTarget.id))
     setDeleteTarget(null)
+  }
+
+  function kindLabel(item: Analysis): string {
+    return item.chartType === "table" ? "Análise" : "Gráfico"
+  }
+
+  function renderCards(items: Analysis[]) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((analysis) => {
+          const Icon = chartTypeIcon[analysis.chartType]
+          const isChart = analysis.chartType !== "table"
+
+          return (
+            <div
+              key={analysis.id}
+              className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <div
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg",
+                    isChart
+                      ? "bg-purple-50 text-purple-700"
+                      : "bg-teal-50 text-teal-700"
+                  )}
+                >
+                  <Icon size={18} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
+                      isChart
+                        ? "bg-purple-50 text-purple-700"
+                        : "bg-teal-50 text-teal-700"
+                    )}
+                  >
+                    {kindLabel(analysis)}
+                  </span>
+                  <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    {chartTypeLabel[analysis.chartType]}
+                  </span>
+                </div>
+              </div>
+
+              <h3 className="mt-3 text-sm font-semibold text-slate-900 line-clamp-1">
+                {analysis.name}
+              </h3>
+
+              {analysis.description && (
+                <p className="mt-1 text-xs text-slate-500 line-clamp-2">
+                  {analysis.description}
+                </p>
+              )}
+
+              <p className="mt-3 text-xs text-slate-400">
+                Atualizado em {formatDate(analysis.updatedAt)}
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/analises/${analysis.id}`}
+                  className="min-w-[7rem] flex-1"
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
+                    Abrir
+                  </Button>
+                </Link>
+                <Link
+                  href={`/explorar?analysisId=${analysis.id}`}
+                  className="min-w-[7rem] flex-1"
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
+                    <Pencil size={13} />
+                    Editar
+                  </Button>
+                </Link>
+                {isChart && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddToDashboardTarget(analysis)}
+                    className="w-full sm:w-auto"
+                  >
+                    <BarChart3 size={13} />
+                    Adicionar ao painel
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setDeleteTarget(analysis)}
+                  className="shrink-0 text-slate-500 hover:text-red-600"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
   }
 
   return (
@@ -80,7 +175,7 @@ export default function AnalisesPage() {
           Minhas Análises
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Análises salvas pelo usuário no Explorer.
+          Consultas salvas e gráficos reutilizáveis no Explorer.
         </p>
       </section>
 
@@ -92,11 +187,11 @@ export default function AnalisesPage() {
               <Inbox size={24} className="text-slate-400" />
             </div>
             <h2 className="mt-4 text-sm font-semibold text-slate-900">
-              Nenhuma análise salva
+              Nenhum item salvo
             </h2>
             <p className="mt-1 max-w-sm text-sm text-slate-500">
-              Execute uma query no Explorer, configure a visualização e salve
-              sua primeira análise.
+              Execute uma query no Explorer e salve uma análise (tabela) ou um
+              gráfico para reutilizar depois.
             </p>
             <Link href="/explorar" className="mt-6">
               <Button className="bg-teal-600 text-white hover:bg-teal-700">
@@ -107,113 +202,70 @@ export default function AnalisesPage() {
           </div>
         </section>
       ) : (
-        /* Analysis cards */
-        <section className="mt-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {analyses.map((analysis) => {
-              const Icon = chartTypeIcon[analysis.chartType]
+        <>
+          {/* Análises (tabela) */}
+          <section className="mt-6">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Análises
+              </h2>
+              <span className="inline-flex items-center rounded-md bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700">
+                {analysisItems.length}
+              </span>
+            </div>
+            {analysisItems.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">
+                Nenhuma análise (tabela) salva ainda.
+              </p>
+            ) : (
+              <div className="mt-4">{renderCards(analysisItems)}</div>
+            )}
+          </section>
 
-              return (
-                <div
-                  key={analysis.id}
-                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                      <Icon size={18} />
-                    </div>
-                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                      {chartTypeLabel[analysis.chartType]}
-                    </span>
-                  </div>
-
-                  <h3 className="mt-3 text-sm font-semibold text-slate-900 line-clamp-1">
-                    {analysis.name}
-                  </h3>
-
-                  {analysis.description && (
-                    <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-                      {analysis.description}
-                    </p>
-                  )}
-
-                  <p className="mt-3 text-xs text-slate-400">
-                    Atualizado em {formatDate(analysis.updatedAt)}
-                  </p>
-
-                  <div className="mt-4 flex items-center gap-2">
-                    <Link
-                      href={`/analises/${analysis.id}`}
-                      className="flex-1"
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                      >
-                        Abrir
-                      </Button>
-                    </Link>
-                    <Link
-                      href={`/explorar?analysisId=${analysis.id}`}
-                      className="flex-1"
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                      >
-                        <Pencil size={13} />
-                        Editar
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      onClick={() => setDeleteTarget(analysis)}
-                      className="shrink-0 text-slate-500 hover:text-red-600"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+          {/* Gráficos */}
+          <section className="mt-8">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Gráficos
+              </h2>
+              <span className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
+                {chartItems.length}
+              </span>
+            </div>
+            {chartItems.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">
+                Nenhum gráfico salvo ainda. No Explorer, altere para
+                &quot;Visualizar&quot; e use &quot;Salvar gráfico&quot;.
+              </p>
+            ) : (
+              <div className="mt-4">{renderCards(chartItems)}</div>
+            )}
+          </section>
+        </>
       )}
 
       {/* Delete confirmation dialog */}
-      <Dialog
+      <DeleteConfirmationDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Excluir análise</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir &ldquo;{deleteTarget?.name}&rdquo;?
-              Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-            >
-              Excluir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title={
+          deleteTarget?.chartType === "table"
+            ? "Excluir análise"
+            : "Excluir gráfico"
+        }
+        itemName={deleteTarget?.name ?? ""}
+        onConfirm={handleDelete}
+      />
+
+      <AddToDashboardDialog
+        open={addToDashboardTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddToDashboardTarget(null)
+        }}
+        analysis={addToDashboardTarget}
+      />
     </div>
   )
 }

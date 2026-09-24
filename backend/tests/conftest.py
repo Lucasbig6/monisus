@@ -50,6 +50,7 @@ async def client(mock_superset_client):
         patch("app.superset.queries.superset_client", mock_superset_client),
         patch("app.superset.sources.superset_client", mock_superset_client),
         patch("app.superset.auth.superset_client", mock_superset_client),
+        patch("app.superset.materialize.superset_client", mock_superset_client),
     ]
     for p in patches:
         p.start()

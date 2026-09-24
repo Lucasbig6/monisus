@@ -11,13 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Inbox, Loader2, Save } from "lucide-react"
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Database, Inbox, Loader2, Save } from "lucide-react"
 import {
   VisualizationPanel,
   type ChartType,
   analyzeColumns,
 } from "@/components/explorer/visualization-panel"
 import { SaveAnalysisDialog } from "@/components/explorer/save-analysis-dialog"
+import { PublishDatasetDialog } from "@/components/explorer/publish-dataset-dialog"
 import { saveAnalysis } from "@/lib/storage/analyses"
 
 const PAGE_SIZE = 10
@@ -30,9 +31,10 @@ interface QueryResultProps {
   databaseId?: number
   dbSchema?: string | null
   datasetId?: number | null
+  onDatasetPublished?: (datasetId: number) => void
 }
 
-export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, datasetId }: QueryResultProps) {
+export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, datasetId, onDatasetPublished }: QueryResultProps) {
   const [pagination, setPagination] = useState({ data, page: 0 })
   const [viewMode, setViewMode] = useState<"table" | "chart">("table")
   const containerRef = useRef<HTMLDivElement>(null)
@@ -77,6 +79,8 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const isChartMode = viewMode === "chart"
 
   function goToPage(p: number) {
     setPagination((prev) => ({ ...prev, page: p }))
@@ -216,7 +220,17 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
             className="shrink-0"
           >
             <Save size={14} />
-            Salvar análise
+            {isChartMode ? "Salvar gráfico" : "Salvar análise"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPublishDialogOpen(true)}
+            className="shrink-0"
+          >
+            <Database size={14} />
+            Salvar como Dataset
           </Button>
         </div>
       </div>
@@ -224,7 +238,7 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
       {saveSuccess && (
         <div className="flex items-center gap-2 border-b border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-700">
           <CheckCircle size={16} />
-          Análise salva com sucesso.
+          {isChartMode ? "Gráfico salvo com sucesso." : "Análise salva com sucesso."}
         </div>
       )}
 
@@ -387,6 +401,23 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
         onSave={handleSaveAnalysis}
+        title={isChartMode ? "Salvar gráfico" : "Salvar análise"}
+        dialogDescription={
+          isChartMode
+            ? "Dê um nome para este gráfico para reutilizá-lo no Dashboard depois."
+            : "Dê um nome para esta análise para encontrá-la facilmente depois."
+        }
+      />
+      <PublishDatasetDialog
+        open={publishDialogOpen}
+        onOpenChange={setPublishDialogOpen}
+        sql={sql ?? ""}
+        databaseId={databaseId ?? 0}
+        dbSchema={dbSchema ?? null}
+        onSuccess={(id) => {
+          setPublishDialogOpen(false)
+          onDatasetPublished?.(id)
+        }}
       />
     </div>
   )

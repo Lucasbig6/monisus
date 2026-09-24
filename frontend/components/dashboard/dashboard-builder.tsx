@@ -4,21 +4,26 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
+  Eye,
   Filter,
+  Info,
   Pencil,
   Plus,
   RefreshCw,
   Save,
+  Share2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { Dashboard, DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
+import type { Dashboard, DashboardAppearance, DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
 import type { Analysis } from "@/lib/types/analysis"
-import { updateDashboard } from "@/lib/storage/dashboards"
+import { updateDashboard, getDashboardSharePath } from "@/lib/storage/dashboards"
 import { getDistinctValues } from "@/lib/api/datasets"
 import { DashboardWidgetView } from "./dashboard-widget"
 import { AddAnalysisDialog } from "./add-analysis-dialog"
 import { AddFilterDialog } from "./add-filter-dialog"
 import { DashboardFiltersBar } from "./dashboard-filters-bar"
+import { ShareDashboardDialog } from "./share-dashboard-dialog"
+import { EditDashboardInfoDialog } from "./edit-dashboard-info-dialog"
 
 import {
   ResponsiveGridLayout,
@@ -43,6 +48,8 @@ export function DashboardBuilder({
   const [editing, setEditing] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [addFilterOpen, setAddFilterOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
   const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>(
@@ -294,6 +301,23 @@ export function DashboardBuilder({
     [dashboard.widgets]
   )
 
+  const viewerHref = getDashboardSharePath(dashboard)
+
+  function handleSaveInfo(data: {
+    name: string
+    description: string
+    appearance: DashboardAppearance
+  }) {
+    const updated: Dashboard = {
+      ...dashboard,
+      name: data.name,
+      description: data.description,
+      appearance: data.appearance,
+    }
+    const saved = updateDashboard(updated)
+    onDashboardChange(saved)
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
       {/* Navigation */}
@@ -307,8 +331,8 @@ export function DashboardBuilder({
 
       {/* Header */}
       <section className="mt-3">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               {dashboard.name}
             </h1>
@@ -317,9 +341,14 @@ export function DashboardBuilder({
                 {dashboard.description}
               </p>
             )}
+            {dashboard.slug && (
+              <p className="mt-1 text-xs text-slate-400">
+                /painel/{dashboard.slug}
+              </p>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -327,8 +356,35 @@ export function DashboardBuilder({
               title="Atualizar dados de todos os widgets"
             >
               <RefreshCw size={14} />
-              Atualizar dados
+              <span className="hidden sm:inline">Atualizar dados</span>
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInfoOpen(true)}
+              title="Editar informações"
+            >
+              <Info size={14} />
+              <span className="hidden sm:inline">Informações</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShareOpen(true)}
+              title="Compartilhar"
+            >
+              <Share2 size={14} />
+              <span className="hidden sm:inline">Compartilhar</span>
+            </Button>
+
+            <Link href={viewerHref}>
+              <Button variant="outline" size="sm" title="Visualizar">
+                <Eye size={14} />
+                Visualizar
+              </Button>
+            </Link>
 
             {editing ? (
               <>
@@ -338,7 +394,7 @@ export function DashboardBuilder({
                   onClick={() => setAddDialogOpen(true)}
                 >
                   <Plus size={14} />
-                  Adicionar análise
+                  Adicionar gráfico
                 </Button>
                 <Button
                   size="sm"
@@ -351,9 +407,9 @@ export function DashboardBuilder({
               </>
             ) : (
               <Button
-                variant="outline"
                 size="sm"
                 onClick={() => setEditing(true)}
+                className="bg-teal-600 text-white hover:bg-teal-700"
               >
                 <Pencil size={14} />
                 Editar
@@ -404,14 +460,15 @@ export function DashboardBuilder({
                 Nenhum widget adicionado
               </h2>
               <p className="mt-1 max-w-sm text-sm text-slate-500">
-                Adicione análises salvas para visualizar seus dados neste painel.
+                Adicione gráficos e análises salvos para visualizar seus dados
+                neste painel.
               </p>
               <Button
                 onClick={() => setAddDialogOpen(true)}
                 className="mt-6 bg-teal-600 text-white hover:bg-teal-700"
               >
                 <Plus size={16} />
-                Adicionar análise
+                Adicionar gráfico
               </Button>
             </div>
           ) : mounted ? (
@@ -470,6 +527,21 @@ export function DashboardBuilder({
         onAdd={handleAddFilter}
         existingFilters={dashboard.filters}
         dashboardWidgetAnalysisIds={dashboard.widgets.map((w) => w.analysisId)}
+      />
+
+      {/* Share */}
+      <ShareDashboardDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        dashboard={dashboard}
+      />
+
+      {/* Edit info / appearance */}
+      <EditDashboardInfoDialog
+        open={infoOpen}
+        onOpenChange={setInfoOpen}
+        dashboard={dashboard}
+        onSave={handleSaveInfo}
       />
     </div>
   )

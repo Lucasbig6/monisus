@@ -26,6 +26,7 @@ import {
   Label,
 } from "@/components/ui/label"
 import type { Dashboard } from "@/lib/types/dashboard"
+import { DeleteConfirmationDialog } from "@/components/shared/delete-confirmation-dialog"
 import {
   getDashboards,
   saveDashboard,
@@ -105,15 +106,13 @@ export default function PaineisPage() {
             </p>
           </div>
 
-          {dashboards.length > 0 && (
-            <Button
-              onClick={() => setCreateOpen(true)}
-              className="bg-teal-600 text-white hover:bg-teal-700"
-            >
-              <Plus size={16} />
-              Novo painel
-            </Button>
-          )}
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="bg-teal-600 text-white hover:bg-teal-700"
+          >
+            <Plus size={16} />
+            Novo dashboard
+          </Button>
         </div>
       </section>
 
@@ -125,18 +124,18 @@ export default function PaineisPage() {
               <Inbox size={24} className="text-slate-400" />
             </div>
             <h2 className="mt-4 text-sm font-semibold text-slate-900">
-              Nenhum painel criado
+              Nenhum dashboard criado
             </h2>
             <p className="mt-1 max-w-sm text-sm text-slate-500">
-              Crie seu primeiro painel para organizar análises em um dashboard
-              personalizado.
+              Crie seu primeiro dashboard para organizar gráficos e análises em
+              um painel personalizado.
             </p>
             <Button
               onClick={() => setCreateOpen(true)}
               className="mt-6 bg-teal-600 text-white hover:bg-teal-700"
             >
               <Plus size={16} />
-              Criar painel
+              Novo dashboard
             </Button>
           </div>
         </section>
@@ -211,7 +210,7 @@ export default function PaineisPage() {
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Novo painel</DialogTitle>
+            <DialogTitle>Novo dashboard</DialogTitle>
             <DialogDescription>
               Dê um nome para seu dashboard para encontrá-lo facilmente.
             </DialogDescription>
@@ -274,36 +273,15 @@ export default function PaineisPage() {
       </Dialog>
 
       {/* Delete confirmation dialog */}
-      <Dialog
+      <DeleteConfirmationDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Excluir painel</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir &ldquo;{deleteTarget?.name}&rdquo;?
-              Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-            >
-              Excluir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Excluir dashboard"
+        itemName={deleteTarget?.name ?? ""}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

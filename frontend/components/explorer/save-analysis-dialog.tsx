@@ -17,12 +17,16 @@ interface SaveAnalysisDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSave: (name: string, description: string) => void
+  title?: string
+  dialogDescription?: string
 }
 
 export function SaveAnalysisDialog({
   open,
   onOpenChange,
   onSave,
+  title = "Salvar análise",
+  dialogDescription = "Dê um nome para esta análise para encontrá-la facilmente depois.",
 }: SaveAnalysisDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -48,10 +52,8 @@ export function SaveAnalysisDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Salvar análise</DialogTitle>
-          <DialogDescription>
-            Dê um nome para esta análise para encontrá-la facilmente depois.
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

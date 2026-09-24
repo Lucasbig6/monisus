@@ -4,15 +4,11 @@ import { useCallback, use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
-  BarChart3,
   CheckCircle,
   Copy,
   FileChartColumn,
   Loader2,
-  LineChart,
-  PieChart,
   Play,
-  Table2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,23 +21,10 @@ import {
 } from "@/components/ui/table"
 import { ChartRenderer } from "@/components/explorer/chart-renderer"
 import type { Analysis } from "@/lib/types/analysis"
+import { chartTypeLabel, chartTypeIcon } from "@/lib/types/charts"
 import { getAnalysis } from "@/lib/storage/analyses"
 import { executeQuery } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
-
-const chartTypeLabel: Record<Analysis["chartType"], string> = {
-  table: "Tabela",
-  bar: "Barras",
-  line: "Linha",
-  pie: "Pizza",
-}
-
-const chartTypeIcon: Record<Analysis["chartType"], typeof Table2> = {
-  table: Table2,
-  bar: BarChart3,
-  line: LineChart,
-  pie: PieChart,
-}
 
 function formatDate(iso: string): string {
   try {

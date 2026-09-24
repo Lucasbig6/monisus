@@ -3,13 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   AlertCircle,
-  BarChart3,
-  LineChart,
   Loader2,
   MoreVertical,
-  PieChart,
   RefreshCw,
-  Table2,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -29,24 +25,19 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChartRenderer } from "@/components/explorer/chart-renderer"
 import type { Analysis } from "@/lib/types/analysis"
+import { chartTypeIcon } from "@/lib/types/charts"
 import type { DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
 import { getAnalysis } from "@/lib/storage/analyses"
 import { executeQuery, executeQueryFiltered } from "@/lib/api/queries"
 import type { FilterClause } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
 
-const chartTypeIcon: Record<Analysis["chartType"], typeof Table2> = {
-  table: Table2,
-  bar: BarChart3,
-  line: LineChart,
-  pie: PieChart,
-}
-
 interface DashboardWidgetViewProps {
   widget: DashboardWidget
   filters: DashboardFilter[]
   filterValues: Record<string, string | string[]>
   onRemove: (widgetId: string) => void
+  readOnly?: boolean
 }
 
 function buildFilterClauses(
@@ -85,6 +76,7 @@ export function DashboardWidgetView({
   filters,
   filterValues,
   onRemove,
+  readOnly = false,
 }: DashboardWidgetViewProps) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [analysisChecked, setAnalysisChecked] = useState(false)
@@ -194,12 +186,12 @@ export function DashboardWidgetView({
   const Icon = chartTypeIcon[analysis.chartType]
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-800 dark:bg-slate-900">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon size={15} className="shrink-0 text-teal-600" />
-          <h3 className="truncate text-sm font-semibold text-slate-900">
+          <Icon size={15} className="shrink-0 text-teal-600 dark:text-teal-400" />
+          <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
             {analysis.name}
           </h3>
         </div>
@@ -212,27 +204,29 @@ export function DashboardWidgetView({
               onClick={() =>
                 fetchQuery(analysis.sql, analysis.databaseId, analysis.dbSchema)
               }
-              className="h-7 w-7 text-slate-400 hover:text-slate-700"
+              className="h-7 w-7 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               title="Atualizar dados"
             >
               <RefreshCw size={13} />
             </Button>
           )}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreVertical size={14} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onRemove(widget.id)}>
-                <Trash2 size={14} />
-                Remover
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!readOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer dark:hover:bg-slate-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onRemove(widget.id)}>
+                  <Trash2 size={14} />
+                  Remover
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
@@ -240,7 +234,7 @@ export function DashboardWidgetView({
       <div className="flex-1 overflow-auto p-4">
         {loading && (
           <div className="flex h-full items-center justify-center">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               <Loader2 size={16} className="animate-spin" />
               Carregando dados...
             </div>
@@ -249,10 +243,12 @@ export function DashboardWidgetView({
 
         {error && (
           <div className="flex h-full flex-col items-center justify-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 dark:bg-red-950">
               <AlertCircle size={18} className="text-red-500" />
             </div>
-            <p className="text-center text-sm text-red-600">{error}</p>
+            <p className="text-center text-sm text-red-600 dark:text-red-400">
+              {error}
+            </p>
             <Button
               variant="outline"
               size="sm"
@@ -269,14 +265,14 @@ export function DashboardWidgetView({
         {!loading && !error && data && (
           <>
             {analysis.chartType === "table" ? (
-              <div className="max-h-full overflow-auto rounded-lg border border-slate-200">
+              <div className="max-h-full overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b-2 border-b-slate-300 hover:bg-slate-50">
+                    <TableRow className="border-b-2 border-b-slate-300 hover:bg-slate-50 dark:border-b-slate-700 dark:hover:bg-slate-800">
                       {Object.keys(data[0] ?? {}).map((col) => (
                         <TableHead
                           key={col}
-                          className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600"
+                          className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                         >
                           {col}
                         </TableHead>
@@ -285,14 +281,17 @@ export function DashboardWidgetView({
                   </TableHeader>
                   <TableBody>
                     {data.slice(0, 50).map((row, i) => (
-                      <TableRow key={i} className="even:bg-slate-50/50">
+                      <TableRow
+                        key={i}
+                        className="even:bg-slate-50/50 dark:even:bg-slate-800/50"
+                      >
                         {Object.keys(data[0] ?? {}).map((col) => (
                           <TableCell
                             key={col}
-                            className="px-3 py-2 text-xs text-slate-700"
+                            className="px-3 py-2 text-xs text-slate-700 dark:text-slate-200"
                           >
                             {row[col] === null || row[col] === undefined
-                              ? "\u2014"
+                              ? "—"
                               : String(row[col])}
                           </TableCell>
                         ))}
@@ -316,7 +315,9 @@ export function DashboardWidgetView({
 
         {!loading && !error && data && data.length === 0 && (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-slate-500">Nenhum dado retornado.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Nenhum dado retornado.
+            </p>
           </div>
         )}
       </div>

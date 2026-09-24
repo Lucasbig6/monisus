@@ -121,15 +121,33 @@ async def test_delete_source(client, mock_superset_client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_source_datasets(client, mock_superset_client, auth_headers):
+async def test_get_source_datasets_filters_by_database_id(
+    client, mock_superset_client, auth_headers
+):
+    """Superset não permite filtrar por database_id; backend filtra em Python."""
     mock_superset_client.get.return_value = {
-        "count": 2,
+        "count": 3,
         "result": [
-            {"id": 1, "table_name": "atendimentos"},
-            {"id": 2, "table_name": "internacoes"},
+            {
+                "id": 1,
+                "table_name": "atendimentos",
+                "database": {"id": 1, "database_name": "SESAPI"},
+            },
+            {
+                "id": 2,
+                "table_name": "internacoes",
+                "database": {"id": 2, "database_name": "Outra"},
+            },
+            {
+                "id": 3,
+                "table_name": "ambulatorial",
+                "database": {"id": 1, "database_name": "SESAPI"},
+            },
         ],
     }
     response = await client.get("/api/sources/1/datasets", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 2
+    names = {ds["table_name"] for ds in body["result"]}
+    assert names == {"atendimentos", "ambulatorial"}

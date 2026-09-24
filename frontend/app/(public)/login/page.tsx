@@ -13,7 +13,7 @@ export default function LoginPage() {
               <Activity size={28} strokeWidth={2.5} />
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900">MoniSUS</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Saude360</h1>
 
             <p className="mt-1 text-sm text-slate-500">
               Monitoramento e análise de dados do SUS

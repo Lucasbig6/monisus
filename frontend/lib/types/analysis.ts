@@ -1,3 +1,5 @@
+import type { ChartType } from "@/lib/types/charts"
+
 export interface Analysis {
   id: string
   name: string
@@ -6,7 +8,7 @@ export interface Analysis {
   databaseId: number
   dbSchema: string | null
   datasetId: number | null
-  chartType: "table" | "bar" | "line" | "pie"
+  chartType: ChartType
   dimension: string | null
   metric: string | null
   createdAt: string

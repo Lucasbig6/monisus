@@ -16,14 +16,12 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   getSource,
-  getSourceSchemas,
-  getSourceTables,
   getSourceTypeConfig,
   type SourceDetail,
-  type TableItem,
 } from "@/lib/api/sources"
 import { executeQuery } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
+import { useSchemaBrowser } from "@/components/sources/use-schema-browser"
 import { ObjectBrowser } from "@/components/preparar/object-browser"
 import { QueryTabs, type QueryTab } from "@/components/preparar/query-tabs"
 import { QueryEditor } from "@/components/preparar/query-editor"
@@ -83,14 +81,17 @@ export default function PrepararPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [schemas, setSchemas] = useState<string[]>([])
-  const [schemasLoading, setSchemasLoading] = useState(true)
-  const [schemasError, setSchemasError] = useState<string | null>(null)
-  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(
-    () => new Set(initialTable ? [initialTable.schema] : [])
-  )
-  const [schemaTables, setSchemaTables] = useState<Record<string, TableItem[]>>({})
-  const [loadingSchemas, setLoadingSchemas] = useState<Set<string>>(new Set())
+  const {
+    schemas,
+    schemasLoading,
+    schemasError,
+    expandedSchemas,
+    schemaTables,
+    loadingSchemas,
+    toggleSchema,
+  } = useSchemaBrowser(sourceId, {
+    initialExpanded: initialTable ? [initialTable.schema] : [],
+  })
 
   const [selectedTable, setSelectedTable] = useState<{
     schema: string
@@ -140,53 +141,6 @@ export default function PrepararPage() {
     }
     load()
   }, [sourceId])
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await getSourceSchemas(sourceId)
-        setSchemas(data.schemas ?? [])
-      } catch (err) {
-        const msg =
-          err instanceof ApiError ? err.detail : "Erro ao carregar schemas."
-        setSchemasError(msg)
-      } finally {
-        setSchemasLoading(false)
-      }
-    }
-    load()
-  }, [sourceId])
-
-  const toggleSchema = useCallback(
-    async (schema: string) => {
-      setExpandedSchemas((prev) => {
-        const next = new Set(prev)
-        if (next.has(schema)) {
-          next.delete(schema)
-        } else {
-          next.add(schema)
-        }
-        return next
-      })
-
-      if (!schemaTables[schema]) {
-        setLoadingSchemas((prev) => new Set(prev).add(schema))
-        try {
-          const data = await getSourceTables(sourceId, schema)
-          setSchemaTables((prev) => ({ ...prev, [schema]: data.tables ?? [] }))
-        } catch {
-          setSchemaTables((prev) => ({ ...prev, [schema]: [] }))
-        } finally {
-          setLoadingSchemas((prev) => {
-            const next = new Set(prev)
-            next.delete(schema)
-            return next
-          })
-        }
-      }
-    },
-    [sourceId, schemaTables]
-  )
 
   const handleSelectTable = useCallback(
     (schema: string, table: string) => {

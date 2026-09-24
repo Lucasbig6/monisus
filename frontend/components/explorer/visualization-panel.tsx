@@ -15,7 +15,8 @@ import {
   type ColumnSelectorOption,
 } from "./column-selector"
 
-export type ChartType = "table" | "bar" | "line" | "pie"
+export type { ChartType } from "@/lib/types/charts"
+import type { ChartType } from "@/lib/types/charts"
 export type ColumnType = "numeric" | "categorical"
 
 export interface ColumnInfo {

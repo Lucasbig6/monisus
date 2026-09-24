@@ -1,12 +1,8 @@
 "use client"
 
 import {
-  BarChart3,
   FileChartColumn,
-  LineChart,
-  PieChart,
   Search,
-  Table2,
 } from "lucide-react"
 import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
@@ -19,21 +15,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import type { Analysis } from "@/lib/types/analysis"
+import { chartTypeLabel, chartTypeIcon } from "@/lib/types/charts"
 import { getAnalyses } from "@/lib/storage/analyses"
-
-const chartTypeLabel: Record<Analysis["chartType"], string> = {
-  table: "Tabela",
-  bar: "Barras",
-  line: "Linha",
-  pie: "Pizza",
-}
-
-const chartTypeIcon: Record<Analysis["chartType"], typeof Table2> = {
-  table: Table2,
-  bar: BarChart3,
-  line: LineChart,
-  pie: PieChart,
-}
 
 interface AddAnalysisDialogProps {
   open: boolean
@@ -54,14 +37,22 @@ export function AddAnalysisDialog({
     const all = getAnalyses()
     const filtered = all.filter((a) => !excludeIds.includes(a.id))
 
-    if (!search.trim()) return filtered
+    const searched = !search.trim()
+      ? filtered
+      : filtered.filter((a) => {
+          const term = search.toLowerCase()
+          return (
+            a.name.toLowerCase().includes(term) ||
+            a.description.toLowerCase().includes(term)
+          )
+        })
 
-    const term = search.toLowerCase()
-    return filtered.filter(
-      (a) =>
-        a.name.toLowerCase().includes(term) ||
-        a.description.toLowerCase().includes(term)
-    )
+    return [...searched].sort((a, b) => {
+      const aChart = a.chartType !== "table" ? 0 : 1
+      const bChart = b.chartType !== "table" ? 0 : 1
+      if (aChart !== bChart) return aChart - bChart
+      return a.name.localeCompare(b.name)
+    })
   }, [excludeIds, search])
 
   function handleSelect(analysis: Analysis) {
@@ -81,9 +72,10 @@ export function AddAnalysisDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Adicionar análise</DialogTitle>
+          <DialogTitle>Adicionar gráfico ou análise</DialogTitle>
           <DialogDescription>
-            Selecione uma análise existente para adicionar ao painel.
+            Selecione um gráfico salvo (preferencialmente) ou uma análise para
+            adicionar ao painel.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,7 +85,7 @@ export function AddAnalysisDialog({
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
           />
           <Input
-            placeholder="Buscar análises..."
+            placeholder="Buscar gráficos e análises..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -112,8 +104,8 @@ export function AddAnalysisDialog({
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 {excludeIds.length > 0
-                  ? "Todas as análises já foram adicionadas a este painel."
-                  : "Crie uma análise no Explorer primeiro."}
+                  ? "Todos os itens já foram adicionados a este painel."
+                  : "Crie um gráfico ou análise no Explorer primeiro."}
               </p>
             </div>
           ) : (
@@ -144,7 +136,9 @@ export function AddAnalysisDialog({
                     </div>
 
                     <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                      {chartTypeLabel[analysis.chartType]}
+                      {analysis.chartType === "table"
+                        ? "Análise"
+                        : chartTypeLabel[analysis.chartType]}
                     </span>
                   </button>
                 )

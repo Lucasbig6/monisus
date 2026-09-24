@@ -25,9 +25,10 @@ export function AiAgentTab({ disabled = false }: AiAgentTabProps) {
             <Bot size={20} />
           </div>
           <div>
-            <CardTitle className="text-base">Agente de Análise</CardTitle>
+            <CardTitle className="text-base">Agente IA</CardTitle>
             <p className="text-sm text-slate-500">
-              Descreva o que deseja analisar em linguagem natural.
+              Analise o mesmo dataset em linguagem natural — uma alternativa ao
+              SQL e ao modo Visual.
             </p>
           </div>
         </div>
@@ -38,23 +39,24 @@ export function AiAgentTab({ disabled = false }: AiAgentTabProps) {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Ex: Mostre o custo total por município, ordenado do maior para o menor"
+            placeholder="Ex: Mostre o total de atendimentos por município, do maior para o menor"
             disabled={disabled}
             rows={3}
+            aria-label="Pergunta para o agente de IA"
             className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-50 resize-none"
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-slate-400">
             <Sparkles size={12} className="inline mr-1" />
-            Em breve — integração com IA será disponibilizada
+            Em breve — a integração com IA será disponibilizada.
           </p>
 
           <Button
             type="button"
             disabled={disabled || true}
-            className="bg-purple-600 text-white hover:bg-purple-700 opacity-50 cursor-not-allowed"
+            className="shrink-0 bg-purple-600 text-white hover:bg-purple-700 opacity-50 cursor-not-allowed"
           >
             <Bot size={16} />
             Analisar
@@ -63,8 +65,8 @@ export function AiAgentTab({ disabled = false }: AiAgentTabProps) {
 
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4">
           <p className="text-center text-sm text-slate-500">
-            O agente de IA transformará sua pergunta em uma configuração de análise
-            e executará automaticamente.
+            Em breve: o agente transformará sua pergunta em consulta e
+            visualização sobre o dataset selecionado — sem sair do Explorar.
           </p>
         </div>
       </CardContent>

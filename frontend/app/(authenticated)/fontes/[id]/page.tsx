@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -22,24 +22,17 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   getSource,
   getSourceDatasets,
-  getSourceSchemas,
-  getSourceTables,
   deleteSource,
   getSourceTypeConfig,
   type SourceDetail,
   type TableItem,
 } from "@/lib/api/sources"
+import { datasetDisplayName } from "@/lib/api/datasets"
 import { ApiError } from "@/lib/api"
+import { useSchemaBrowser } from "@/components/sources/use-schema-browser"
+import { DeleteConfirmationDialog } from "@/components/shared/delete-confirmation-dialog"
 
 const ICONS: Record<string, typeof Database> = {
   Database,
@@ -52,6 +45,7 @@ interface DatasetItem {
   id: number
   table_name: string
   schema: string
+  description?: string | null
 }
 
 interface DatasetsResponse {
@@ -69,16 +63,21 @@ export default function FonteDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const [schemas, setSchemas] = useState<string[]>([])
-  const [schemasLoading, setSchemasLoading] = useState(true)
-  const [schemasError, setSchemasError] = useState<string | null>(null)
-  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set())
-  const [schemaTables, setSchemaTables] = useState<Record<string, TableItem[]>>({})
-  const [loadingSchemas, setLoadingSchemas] = useState<Set<string>>(new Set())
+  const {
+    schemas,
+    schemasLoading,
+    schemasError,
+    expandedSchemas,
+    schemaTables,
+    loadingSchemas,
+    toggleSchema,
+  } = useSchemaBrowser(sourceId)
 
   const [datasets, setDatasets] = useState<DatasetItem[]>([])
   const [datasetsLoading, setDatasetsLoading] = useState(true)
+  const [datasetsError, setDatasetsError] = useState<string | null>(null)
 
   const [search, setSearch] = useState("")
 
@@ -101,28 +100,16 @@ export default function FonteDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await getSourceSchemas(sourceId)
-        setSchemas(data.schemas ?? [])
+        const data = (await getSourceDatasets(sourceId)) as DatasetsResponse
+        setDatasets(data.result ?? [])
+        setDatasetsError(null)
       } catch (err) {
         const msg =
           err instanceof ApiError
             ? err.detail
-            : "Erro ao carregar schemas."
-        setSchemasError(msg)
-      } finally {
-        setSchemasLoading(false)
-      }
-    }
-    load()
-  }, [sourceId])
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = (await getSourceDatasets(sourceId)) as DatasetsResponse
-        setDatasets(data.result ?? [])
-      } catch {
-        // silently handled
+            : "Erro ao carregar datasets publicados."
+        setDatasetsError(msg)
+        setDatasets([])
       } finally {
         setDatasetsLoading(false)
       }
@@ -130,45 +117,19 @@ export default function FonteDetailPage() {
     load()
   }, [sourceId])
 
-  const toggleSchema = useCallback(
-    async (schema: string) => {
-      setExpandedSchemas((prev) => {
-        const next = new Set(prev)
-        if (next.has(schema)) {
-          next.delete(schema)
-          return next
-        }
-        next.add(schema)
-        return next
-      })
-
-      if (!schemaTables[schema]) {
-        setLoadingSchemas((prev) => new Set(prev).add(schema))
-        try {
-          const data = await getSourceTables(sourceId, schema)
-          setSchemaTables((prev) => ({ ...prev, [schema]: data.tables ?? [] }))
-        } catch {
-          setSchemaTables((prev) => ({ ...prev, [schema]: [] }))
-        } finally {
-          setLoadingSchemas((prev) => {
-            const next = new Set(prev)
-            next.delete(schema)
-            return next
-          })
-        }
-      }
-    },
-    [sourceId, schemaTables]
-  )
-
   async function handleDelete() {
     setDeleting(true)
+    setDeleteError(null)
     try {
       await deleteSource(sourceId)
       router.push("/fontes")
-    } catch {
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.detail
+          : "Erro ao excluir a fonte de dados."
+      setDeleteError(msg)
       setDeleting(false)
-      setDeleteOpen(false)
     }
   }
 
@@ -427,6 +388,11 @@ export default function FonteDetailPage() {
             <div className="mt-4 flex items-center justify-center p-8">
               <Loader2 size={20} className="animate-spin text-slate-400" />
             </div>
+          ) : datasetsError ? (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <AlertCircle size={16} />
+              {datasetsError}
+            </div>
           ) : datasets.length === 0 ? (
             <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
@@ -454,13 +420,12 @@ export default function FonteDetailPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="text-sm font-semibold text-slate-900 truncate">
-                          {dataset.table_name}
+                          {datasetDisplayName(dataset)}
                         </h3>
-                        {dataset.schema && (
-                          <p className="text-xs text-slate-500">
-                            {dataset.schema}
-                          </p>
-                        )}
+                        <p className="text-xs text-slate-500 truncate">
+                          {dataset.table_name}
+                          {dataset.schema ? ` · ${dataset.schema}` : ""}
+                        </p>
                       </div>
                     </div>
                     <div className="mt-3">
@@ -481,31 +446,19 @@ export default function FonteDetailPage() {
       )}
 
       {/* Delete confirmation */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Excluir fonte</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir &ldquo;{source.database_name}
-              &rdquo;? Todos os datasets associados serão removidos do Superset.
-              Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting && <Loader2 size={14} className="animate-spin" />}
-              Excluir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open)
+          if (!open) setDeleteError(null)
+        }}
+        title="Excluir fonte"
+        itemName={source.database_name}
+        description={`Tem certeza que deseja excluir "${source.database_name}"? Todos os datasets associados serão removidos do Superset. Esta ação não pode ser desfeita.`}
+        loading={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

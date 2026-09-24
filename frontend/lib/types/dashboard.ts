@@ -18,12 +18,19 @@ export interface DashboardWidget {
   }
 }
 
+export interface DashboardAppearance {
+  theme?: "light" | "dark"
+  showBrand?: boolean
+}
+
 export interface Dashboard {
   id: string
   name: string
   description: string
+  slug?: string
   widgets: DashboardWidget[]
   filters: DashboardFilter[]
+  appearance?: DashboardAppearance
   createdAt: string
   updatedAt: string
 }

@@ -114,3 +114,112 @@ async def test_refresh_columns(client, mock_superset_client, auth_headers):
     mock_superset_client.put.return_value = {"result": "success"}
     response = await client.put("/api/datasets/1/refresh", headers=auth_headers)
     assert response.status_code == 200
+
+
+# --- Publish Dataset tests ---
+
+
+@pytest.mark.asyncio
+async def test_publish_dataset_success(client, mock_superset_client, auth_headers):
+    call_count = 0
+
+    async def side_effect(path, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if "sqllab/execute" in path:
+            return {"status": "success"}
+        if path == "/api/v1/dataset/":
+            return {"data": {"id": 42, "table_name": "monisus_ds_teste_a1b2c3"}}
+        return {}
+
+    mock_superset_client.post.side_effect = side_effect
+
+    response = await client.post(
+        "/api/datasets/publish",
+        json={
+            "database_id": 4,
+            "sql": "SELECT municipio FROM demo_atendimentos",
+            "db_schema": "public",
+            "name": "Teste",
+            "description": "Descricao",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] == 42
+    assert body["table_name"].startswith("monisus_ds_teste_")
+    assert body["schema"] == "public"
+    assert body["name"] == "Teste"
+    assert body["description"] == "Descricao"
+    assert body["database_id"] == 4
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_publish_dataset_insert_bloqueado(client, mock_superset_client, auth_headers):
+    response = await client.post(
+        "/api/datasets/publish",
+        json={
+            "database_id": 4,
+            "sql": "INSERT INTO table VALUES (1)",
+            "name": "Teste",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+    mock_superset_client.post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_publish_dataset_empty_name(client, mock_superset_client, auth_headers):
+    response = await client.post(
+        "/api/datasets/publish",
+        json={
+            "database_id": 4,
+            "sql": "SELECT 1",
+            "name": "   ",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_publish_dataset_ctas_blocked(client, mock_superset_client, auth_headers):
+    from httpx import HTTPStatusError, Request, Response
+
+    async def side_effect(path, **kwargs):
+        if "sqllab/execute" in path:
+            req = Request("POST", "http://test/api/v1/sqllab/execute/")
+            resp = Response(
+                status_code=403,
+                request=req,
+                json={
+                    "errors": [
+                        {
+                            "message": (
+                                "This database does not allow creating "
+                                "tables from queries (CTAS)."
+                            )
+                        }
+                    ]
+                },
+            )
+            raise HTTPStatusError(message="403", request=req, response=resp)
+        return {}
+
+    mock_superset_client.post.side_effect = side_effect
+
+    response = await client.post(
+        "/api/datasets/publish",
+        json={
+            "database_id": 6,
+            "sql": "SELECT 1",
+            "name": "Teste",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "materialização" in detail.lower() or "CTAS" in detail

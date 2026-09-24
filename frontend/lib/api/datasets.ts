@@ -17,6 +17,7 @@ export interface DatasetListItem {
   id: number
   table_name: string
   schema: string
+  description?: string | null
   database: DatasetDatabase
   columns: DatasetColumn[]
 }
@@ -60,4 +61,40 @@ export interface CreateDatasetRequest {
 
 export async function createDataset(data: CreateDatasetRequest): Promise<unknown> {
   return apiPost<unknown>("/api/datasets", data)
+}
+
+export interface PublishDatasetRequest {
+  database_id: number
+  sql: string
+  db_schema: string | null
+  name: string
+  description: string | null
+}
+
+export interface PublishDatasetResponse {
+  id: number
+  table_name: string
+  schema: string | null
+  name: string
+  description: string | null
+  database_id: number
+}
+
+export async function publishDataset(
+  data: PublishDatasetRequest
+): Promise<PublishDatasetResponse> {
+  return apiPost<PublishDatasetResponse>("/api/datasets/publish", data)
+}
+
+export function datasetDisplayName(dataset: {
+  table_name: string
+  description?: string | null
+}): string {
+  const description = dataset.description?.trim()
+  if (description) return description
+
+  return dataset.table_name
+    .replace(/^monisus_ds_/, "")
+    .replace(/_[0-9a-f]{6}$/, "")
+    .replace(/_/g, " ")
 }

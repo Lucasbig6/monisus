@@ -252,7 +252,8 @@ export function ExplorationConfig({
         <CardHeader>
           <CardTitle className="text-sm">Configurar análise</CardTitle>
           <p className="text-xs text-slate-500">
-            Arraste campos para os slots ou clique neles para selecionar.
+            Mesmo dataset da aba SQL: escolha dimensão e métrica, ou arraste os
+            campos para os slots.
           </p>
         </CardHeader>
         <CardContent className="space-y-6">

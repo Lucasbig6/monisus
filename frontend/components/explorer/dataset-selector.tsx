@@ -1,6 +1,6 @@
 "use client"
 
-import { DatasetListItem } from "@/lib/api/datasets"
+import { DatasetListItem, datasetDisplayName } from "@/lib/api/datasets"
 import { Loader2 } from "lucide-react"
 
 interface DatasetSelectorProps {
@@ -51,7 +51,7 @@ export function DatasetSelector({
         </option>
         {datasets.map((dataset) => (
           <option key={dataset.id} value={dataset.id}>
-            {dataset.table_name}
+            {datasetDisplayName(dataset)}
           </option>
         ))}
       </select>

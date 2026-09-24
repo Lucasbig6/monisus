@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_token
 from app.superset import datasets as superset_datasets
+from app.superset.materialize import materialize_query
+from app.superset.naming import generate_table_name
+from app.superset.queries import validar_sql
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
 
@@ -88,3 +91,57 @@ async def create_dataset(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class PublishDatasetRequest(BaseModel):
+    database_id: int
+    sql: str
+    db_schema: str | None = None
+    name: str
+    description: str | None = None
+
+
+@router.post("/publish", status_code=201)
+async def publish_dataset(
+    request: PublishDatasetRequest,
+    token: str = Depends(get_current_token),
+) -> dict[str, Any]:
+    """Materializa uma query SELECT/WITH em tabela física e registra como Dataset."""
+    try:
+        validar_sql(request.sql)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not request.name.strip():
+        raise HTTPException(status_code=422, detail="Nome do dataset é obrigatório.")
+
+    table_name = generate_table_name(request.name)
+
+    try:
+        await materialize_query(
+            database_id=request.database_id,
+            sql=request.sql,
+            schema=request.db_schema,
+            table_name=table_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        dataset = await superset_datasets.create_dataset(
+            database_id=request.database_id,
+            table_name=table_name,
+            schema=request.db_schema,
+            description=request.description,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "id": dataset.get("id"),
+        "table_name": table_name,
+        "schema": request.db_schema,
+        "name": request.name,
+        "description": request.description,
+        "database_id": request.database_id,
+    }

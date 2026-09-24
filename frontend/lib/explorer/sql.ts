@@ -1,7 +1,8 @@
 import type { DatasetColumn } from "@/lib/api/datasets"
+import type { ChartVisualization } from "@/lib/types/charts"
 
+export type { ChartVisualization } from "@/lib/types/charts"
 export type AggregationType = "SUM" | "AVG" | "COUNT"
-export type ChartVisualization = "bar" | "line" | "table"
 
 export interface ExplorationRequest {
   dimension: string
@@ -76,4 +77,11 @@ export function generateExplorationSql(
     `ORDER BY ${metricAlias} DESC`,
     `LIMIT 100`,
   ].join("\n")
+}
+
+export function generatePreviewSql(tableName: string): string {
+  if (!isValidIdentifier(tableName)) {
+    throw new Error(`Nome de tabela inválido: "${tableName}"`)
+  }
+  return `SELECT *\nFROM ${tableName}\nLIMIT 100`
 }

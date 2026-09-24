@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.superset.client import superset_client
+from app.superset.errors import extract_superset_error
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,40 @@ async def create_dataset(
     schema: str | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
-    """Registra uma tabela existente como dataset no Superset."""
+    """Registra uma tabela existente como dataset no Superset.
+
+    Se já existir um dataset com a mesma tabela e database, retorna o existente.
+    """
+    # Verificar se já existe dataset com essa tabela neste database
+    try:
+        existing = await superset_client.get(
+            "/api/v1/dataset/",
+            params={
+                "q": (
+                    f"(filters:!((col:table_name,opr:eq,value:'{table_name}')))"
+                )
+            },
+        )
+        for ds in existing.get("result", []):
+            if ds.get("table_name") == table_name:
+                db = ds.get("database", {})
+                if db.get("id") == database_id:
+                    ds_id = ds.get("id")
+                    if ds_id and description:
+                        try:
+                            await superset_client.put(
+                                f"/api/v1/dataset/{ds_id}",
+                                json={"description": description},
+                            )
+                        except Exception:
+                            logger.debug(
+                                "Não foi possível atualizar descrição no dataset %s",
+                                ds_id,
+                            )
+                    return ds
+    except Exception:
+        logger.debug("Busca de dataset existente falhou, tentando criar")
+
     payload: dict[str, Any] = {
         "database": database_id,
         "table_name": table_name,
@@ -74,15 +108,6 @@ async def create_dataset(
 
         return result
     except httpx.HTTPStatusError as e:
-        detail = ""
-        try:
-            body = e.response.json()
-            errors = body.get("errors", [])
-            if errors:
-                detail = errors[0].get("message", "")
-            elif "message" in body:
-                detail = str(body["message"])
-        except Exception:
-            pass
+        detail = extract_superset_error(e)
         logger.warning("Criação de dataset falhou: %s", detail)
         raise ValueError(detail or "Erro ao criar dataset no Superset.") from e

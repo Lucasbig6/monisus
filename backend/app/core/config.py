@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     api_prefix: str = "/api"
     superset_timeout: float = 30.0
+    database_url: str = "postgresql+psycopg://saude360:saude360_password@localhost:5433/saude360"
+    test_database_url: str = (
+        "postgresql+psycopg://saude360:saude360_password@localhost:5433/saude360_test"
+    )
 
 
 settings = Settings()

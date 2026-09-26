@@ -422,10 +422,14 @@ class SupersetClient:
 O frontend deverá consumir a API do MoniSUS:
 
 ```text
-GET /api/dashboards
-GET /api/datasets
-GET /api/charts
-POST /api/queries
+GET    /api/analyses                 # domínio Saude360 (PostgreSQL próprio)
+GET    /api/dashboards               # domínio Saude360 (PostgreSQL próprio)
+POST   /api/dashboards
+GET    /api/dashboards/by-slug/{slug}   # público (link compartilhado)
+GET    /api/superset/dashboards      # proxy do Superset (padrão /api/v1/dashboard/)
+GET    /api/datasets
+GET    /api/charts
+POST   /api/queries
 ```
 
 e não diretamente:

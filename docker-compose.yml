@@ -1,0 +1,20 @@
+services:
+  saude360-postgres:
+    image: postgres:16
+    container_name: saude360-postgres
+    environment:
+      POSTGRES_DB: saude360
+      POSTGRES_USER: saude360
+      POSTGRES_PASSWORD: saude360_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - saude360_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saude360 -d saude360"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  saude360_pgdata:

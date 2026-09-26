@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 import jwt
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.session import get_db
+from app.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -53,3 +58,22 @@ async def get_current_token(authorization: str = Header(...)) -> str:
         )
 
     return token
+
+
+def get_created_by(
+    db: Session = Depends(get_db),
+    token: str = Depends(get_current_token),
+) -> uuid.UUID | None:
+    """Resolve `created_by` (melhor esforço) a partir do `sub` do JWT.
+
+    Retorna ``None`` quando o usuário local correspondente não existe —
+    a coluna é nullable e o registro ainda é criado.
+    """
+    claims = validate_access_token(token)
+    username = claims.get("sub")
+    if not isinstance(username, str) or not username:
+        return None
+
+    return db.scalar(
+        select(User.id).where(User.username == username, User.is_active.is_(True))
+    )

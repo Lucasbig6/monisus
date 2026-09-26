@@ -1,13 +1,35 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import jwt
-import pytest
-from httpx import ASGITransport, AsyncClient
+from dotenv import dotenv_values
 
-from app.core.config import settings
-from app.main import app
+# ---------------------------------------------------------------------------
+# Os testes rodam SOMENTE contra o banco de testes (saude360_test).
+# Precisa acontecer antes de importar app.core.config / app.main, porque o
+# engine do SQLAlchemy e o Alembic leem settings.database_url na importação.
+# ---------------------------------------------------------------------------
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+_TEST_URL = os.environ.get("TEST_DATABASE_URL") or dotenv_values(BACKEND_DIR / ".env").get(
+    "TEST_DATABASE_URL"
+)
+if not _TEST_URL:
+    raise RuntimeError("TEST_DATABASE_URL não definido (backend/.env)")
+if "saude360_test" not in _TEST_URL:
+    raise RuntimeError(f"TEST_DATABASE_URL inválido: {_TEST_URL}")
+os.environ["DATABASE_URL"] = _TEST_URL
+
+import jwt  # noqa: E402
+import pytest  # noqa: E402
+from alembic.config import Config as AlembicConfig  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import create_engine, text  # noqa: E402
+
+from alembic import command as alembic_command  # noqa: E402
+from app.core.config import settings  # noqa: E402
+from app.main import app  # noqa: E402
 
 
 def make_token(**claims) -> str:
@@ -73,3 +95,43 @@ async def client(mock_superset_client):
         yield ac
     for p in patches:
         p.stop()
+
+
+@pytest.fixture(scope="session")
+def test_db_url() -> str:
+    """Garante que os testes apontam para o banco de testes e que ele responde."""
+    if "saude360_test" not in settings.database_url:
+        pytest.fail(
+            f"recuso rodar testes fora do banco de teste: {settings.database_url}"
+        )
+
+    engine = create_engine(settings.database_url)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - depende do ambiente
+        pytest.skip(
+            f"PostgreSQL indisponível ({exc.__class__.__name__}) — suba com `make db-up`"
+        )
+    finally:
+        engine.dispose()
+
+    return settings.database_url
+
+
+@pytest.fixture(scope="session")
+def migrated_db(test_db_url: str) -> str:
+    """Reseta o schema do banco de testes e aplica `alembic upgrade head`."""
+    engine = create_engine(test_db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+    finally:
+        engine.dispose()
+
+    cfg = AlembicConfig(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    alembic_command.upgrade(cfg, "head")
+
+    return test_db_url

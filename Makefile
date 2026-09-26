@@ -1,4 +1,4 @@
-.PHONY: dev dev-f dev-b build lint test stop stop-f stop-b superset-up superset-down superset-seed down clean help
+.PHONY: dev dev-f dev-b build lint test stop stop-f stop-b superset-up superset-down superset-seed db-up db-down db-migrate db-seed down clean help
 
 help: ## Mostra ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -45,6 +45,18 @@ superset-seed: ## Popula dados DEMO no Superset
 	@sleep 5
 	@echo "Executando seed..."
 	docker exec superset_app python /app/seed_demo.py
+
+db-up: ## Sobe o PostgreSQL do Saude360 (porta 5433)
+	docker compose up -d saude360-postgres
+
+db-down: ## Para o PostgreSQL do Saude360
+	docker compose stop saude360-postgres
+
+db-migrate: ## Aplica migrations do Alembic no banco do Saude360
+	cd backend && .venv/bin/alembic upgrade head
+
+db-seed: ## Seed inicial (roles + usuário admin)
+	cd backend && .venv/bin/python -m app.db.seed
 
 down: ## Para tudo (frontend + backend + superset)
 	@make stop

@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import uuid
+
+import pytest
+from sqlalchemy import text
+
+from app.db.session import SessionLocal, engine
+from app.models import User
+from tests.conftest import make_token
+
+
+def truncate_domain() -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE dashboard_filters, dashboard_widgets, dashboards, "
+                "analyses, users CASCADE"
+            )
+        )
+
+
+@pytest.fixture(autouse=True)
+def reset_domain_tables(migrated_db: str):
+    """Zera as tabelas de domínio antes e depois de cada teste (banco de teste)."""
+    truncate_domain()
+    yield
+    truncate_domain()
+
+
+def payload(**overrides) -> dict:
+    data = {
+        "name": "Atendimentos por município",
+        "description": "Comparativo mensal",
+        "sql": "SELECT * FROM atendimentos",
+        "databaseId": 1,
+        "dbSchema": "public",
+        "datasetId": 12,
+        "chartType": "bar",
+        "dimension": "municipio",
+        "metric": "count",
+    }
+    data.update(overrides)
+    return data
+
+
+async def test_create_analysis_returns_201_camel_case(client, auth_headers):
+    response = await client.post("/api/analyses", json=payload(), headers=auth_headers)
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["name"] == "Atendimentos por município"
+    assert data["databaseId"] == 1
+    assert data["dbSchema"] == "public"
+    assert data["chartType"] == "bar"
+    assert data["createdBy"] is None
+    assert "created_at" not in data
+    uuid.UUID(data["id"])
+    assert data["createdAt"]
+    assert data["updatedAt"]
+
+
+async def test_create_analysis_without_auth_is_422(client):
+    response = await client.post("/api/analyses", json=payload())
+    assert response.status_code == 422
+
+
+async def test_create_analysis_with_invalid_token_is_401(client):
+    response = await client.post(
+        "/api/analyses",
+        json=payload(),
+        headers={"Authorization": "Bearer token-invalido"},
+    )
+    assert response.status_code == 401
+
+
+async def test_create_analysis_validates_empty_name(client, auth_headers):
+    response = await client.post(
+        "/api/analyses", json=payload(name=""), headers=auth_headers
+    )
+    assert response.status_code == 422
+
+
+async def test_created_by_is_resolved_from_token_sub(client):
+    db = SessionLocal()
+    user = User(username="lucas", full_name="Lucas Admin")
+    db.add(user)
+    db.commit()
+    user_id = user.id
+    db.close()
+
+    headers = {"Authorization": f"Bearer {make_token(sub='lucas')}"}
+    response = await client.post("/api/analyses", json=payload(), headers=headers)
+    assert response.status_code == 201
+    assert response.json()["createdBy"] == str(user_id)
+
+
+async def test_list_analyses_returns_plain_array(client, auth_headers):
+    created = await client.post("/api/analyses", json=payload(), headers=auth_headers)
+    assert created.status_code == 201
+
+    response = await client.get("/api/analyses", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert [item["id"] for item in data] == [created.json()["id"]]
+
+
+async def test_list_analyses_requires_auth(client):
+    response = await client.get("/api/analyses")
+    assert response.status_code == 422
+
+
+async def test_get_analysis_by_id(client, auth_headers):
+    created = await client.post("/api/analyses", json=payload(), headers=auth_headers)
+    analysis_id = created.json()["id"]
+
+    response = await client.get(f"/api/analyses/{analysis_id}", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["id"] == analysis_id
+
+
+async def test_get_analysis_not_found_is_404(client, auth_headers):
+    response = await client.get(f"/api/analyses/{uuid.uuid4()}", headers=auth_headers)
+    assert response.status_code == 404
+
+
+async def test_get_analysis_invalid_uuid_is_422(client, auth_headers):
+    response = await client.get("/api/analyses/nao-uuid", headers=auth_headers)
+    assert response.status_code == 422
+
+
+async def test_put_updates_only_sent_fields(client, auth_headers):
+    created = await client.post("/api/analyses", json=payload(), headers=auth_headers)
+    analysis_id = created.json()["id"]
+
+    response = await client.put(
+        f"/api/analyses/{analysis_id}",
+        json={"name": "Renomeada"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Renomeada"
+    assert data["description"] == "Comparativo mensal"
+    assert data["sql"] == "SELECT * FROM atendimentos"
+    assert data["metric"] == "count"
+
+
+async def test_put_can_clear_description_with_null(client, auth_headers):
+    created = await client.post("/api/analyses", json=payload(), headers=auth_headers)
+    analysis_id = created.json()["id"]
+
+    response = await client.put(
+        f"/api/analyses/{analysis_id}",
+        json={"description": None},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+
+
+async def test_put_analysis_not_found_is_404(client, auth_headers):
+    response = await client.put(
+        f"/api/analyses/{uuid.uuid4()}",
+        json={"name": "Qualquer"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+async def test_delete_analysis_then_get_is_404(client, auth_headers):
+    created = await client.post("/api/analyses", json=payload(), headers=auth_headers)
+    analysis_id = created.json()["id"]
+
+    response = await client.delete(f"/api/analyses/{analysis_id}", headers=auth_headers)
+    assert response.status_code == 204
+
+    response = await client.get(f"/api/analyses/{analysis_id}", headers=auth_headers)
+    assert response.status_code == 404

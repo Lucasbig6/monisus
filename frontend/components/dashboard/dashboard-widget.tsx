@@ -27,7 +27,7 @@ import { ChartRenderer } from "@/components/explorer/chart-renderer"
 import type { Analysis } from "@/lib/types/analysis"
 import { chartTypeIcon } from "@/lib/types/charts"
 import type { DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
-import { getAnalysis } from "@/lib/storage/analyses"
+import { getAnalysis } from "@/lib/api/analyses"
 import { executeQuery, executeQueryFiltered } from "@/lib/api/queries"
 import type { FilterClause } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
@@ -79,7 +79,13 @@ export function DashboardWidgetView({
   readOnly = false,
 }: DashboardWidgetViewProps) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
-  const [analysisChecked, setAnalysisChecked] = useState(false)
+  // loading: buscando · ready: renderiza · missing: análise não existe (remove)
+  //         · error: falha de rede/contrato (mantém o widget, sem remover)
+  const [analysisState, setAnalysisState] = useState<
+    "loading" | "ready" | "missing" | "error"
+  >("loading")
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [analysisReload, setAnalysisReload] = useState(0)
   const [data, setData] = useState<Record<string, unknown>[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -147,39 +153,125 @@ export function DashboardWidgetView({
 
   useEffect(() => {
     mountedRef.current = true
+    let cancelled = false
 
-    const loaded = getAnalysis(widget.analysisId)
+    async function load() {
+      try {
+        const loaded = await getAnalysis(widget.analysisId)
+        if (cancelled || !mountedRef.current) return
 
-    requestAnimationFrame(() => {
-      if (!mountedRef.current) return
-      setAnalysis(loaded)
-      setAnalysisChecked(true)
+        requestAnimationFrame(() => {
+          if (!mountedRef.current) return
+          setAnalysis(loaded)
+          setAnalysisState(loaded ? "ready" : "missing")
+          setAnalysisError(null)
 
-      if (loaded?.databaseId && loaded.sql) {
-        fetchQueryRef.current(loaded.sql, loaded.databaseId, loaded.dbSchema)
+          if (loaded?.databaseId && loaded.sql) {
+            fetchQueryRef.current(loaded.sql, loaded.databaseId, loaded.dbSchema)
+          }
+        })
+      } catch (err) {
+        if (cancelled || !mountedRef.current) return
+
+        requestAnimationFrame(() => {
+          if (!mountedRef.current) return
+          setAnalysis(null)
+          if (err instanceof ApiError && err.status === 404) {
+            setAnalysisState("missing")
+          } else {
+            setAnalysisError(
+              err instanceof ApiError
+                ? err.detail
+                : "Erro ao carregar a análise."
+            )
+            setAnalysisState("error")
+          }
+        })
       }
-    })
+    }
+
+    load()
 
     return () => {
+      cancelled = true
       mountedRef.current = false
     }
-  }, [widget.analysisId])
+  }, [widget.analysisId, analysisReload])
 
+  // só remove o widget quando a análise realmente não existe (404/ausente);
+  // falhas de rede/contrato caem em "error" e preservam o widget
   useEffect(() => {
-    if (analysisChecked && !analysis) {
+    if (analysisState === "missing") {
       onRemove(widget.id)
     }
-  }, [analysisChecked, analysis, onRemove, widget.id])
+  }, [analysisState, onRemove, widget.id])
 
   useEffect(() => {
-    if (analysisChecked && analysis?.databaseId && analysis.sql) {
+    if (analysisState === "ready" && analysis?.databaseId && analysis.sql) {
       requestAnimationFrame(() => {
         fetchQueryRef.current(analysis.sql, analysis.databaseId, analysis.dbSchema)
       })
     }
-  }, [filterValues, analysisChecked, analysis])
+  }, [filterValues, analysisState, analysis])
 
-  if (!analysisChecked || !analysis) {
+  if (analysisState === "loading" || analysisState === "missing") {
+    return null
+  }
+
+  if (analysisState === "error") {
+    return (
+      <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle
+              size={15}
+              className="shrink-0 text-red-500 dark:text-red-400"
+            />
+            <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Análise indisponível
+            </h3>
+          </div>
+
+          {!readOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer dark:hover:bg-slate-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onRemove(widget.id)}>
+                  <Trash2 size={14} />
+                  Remover
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
+          <p className="text-center text-sm text-red-600 dark:text-red-400">
+            {analysisError ?? "Erro ao carregar a análise."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setAnalysisError(null)
+              setAnalysisState("loading")
+              setAnalysisReload((tick) => tick + 1)
+            }}
+          >
+            <RefreshCw size={13} />
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!analysis) {
     return null
   }
 

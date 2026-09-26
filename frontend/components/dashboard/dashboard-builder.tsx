@@ -1,9 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
+  AlertCircle,
   ArrowLeft,
+  Check,
   Eye,
   Filter,
   Info,
@@ -12,11 +14,20 @@ import {
   RefreshCw,
   Save,
   Share2,
+  StretchHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { Dashboard, DashboardAppearance, DashboardFilter, DashboardWidget } from "@/lib/types/dashboard"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import type { Dashboard, DashboardAppearance, DashboardFilter, DashboardWidth, DashboardWidget } from "@/lib/types/dashboard"
 import type { Analysis } from "@/lib/types/analysis"
-import { updateDashboard, getDashboardSharePath } from "@/lib/storage/dashboards"
+import { updateDashboard, toDashboardPayload } from "@/lib/api/dashboards"
+import { cn, dashboardWidthClass, getDashboardSharePath } from "@/lib/utils"
+import { ApiError } from "@/lib/api"
 import { getDistinctValues } from "@/lib/api/datasets"
 import { DashboardWidgetView } from "./dashboard-widget"
 import { AddAnalysisDialog } from "./add-analysis-dialog"
@@ -36,6 +47,16 @@ const GRID_BREAKPOINTS = { lg: 1024, md: 768, sm: 0 }
 const GRID_ROW_HEIGHT = 80
 const GRID_MARGIN: [number, number] = [16, 16]
 
+const WIDTH_OPTIONS: {
+  value: DashboardWidth
+  label: string
+  hint: string
+}[] = [
+  { value: "default", label: "Padrão", hint: "1280px" },
+  { value: "wide", label: "Larga", hint: "1536px" },
+  { value: "full", label: "Tela cheia", hint: "100%" },
+]
+
 interface DashboardBuilderProps {
   dashboard: Dashboard
   onDashboardChange: (dashboard: Dashboard) => void
@@ -51,6 +72,54 @@ export function DashboardBuilder({
   const [shareOpen, setShareOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+
+  // Fila de persistência: PUT serializado com o snapshot mais recente.
+  //  - latestRef é lido imediatamente antes de cada PUT;
+  //  - dirtyRef só é limpo após sucesso (e só se nada mais novo chegou);
+  //  - falha não retenta sozinha: o próximo evento do usuário reativa o worker.
+  const latestRef = useRef(dashboard)
+  const dirtyRef = useRef(false)
+  const workingRef = useRef(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const pump = useCallback(async () => {
+    if (workingRef.current) return
+    workingRef.current = true
+
+    try {
+      while (dirtyRef.current) {
+        const snapshot = latestRef.current
+
+        try {
+          await updateDashboard(snapshot.id, toDashboardPayload(snapshot))
+        } catch (err) {
+          setSaveError(
+            err instanceof ApiError
+              ? err.detail
+              : "Não foi possível salvar o painel."
+          )
+          return
+        }
+
+        if (latestRef.current === snapshot) {
+          dirtyRef.current = false
+        }
+        setSaveError(null)
+      }
+    } finally {
+      workingRef.current = false
+    }
+  }, [])
+
+  const persist = useCallback(
+    (next: Dashboard) => {
+      latestRef.current = next
+      dirtyRef.current = true
+      onDashboardChange(next)
+      void pump()
+    },
+    [onDashboardChange, pump]
+  )
 
   const [filterValues, setFilterValues] = useState<Record<string, string | string[]>>(
     () => {
@@ -163,10 +232,9 @@ export function DashboardBuilder({
       })
 
       const updated = { ...dashboard, widgets: updatedWidgets }
-      updateDashboard(updated)
-      onDashboardChange(updated)
+      persist(updated)
     },
-    [dashboard, onDashboardChange]
+    [dashboard, persist]
   )
 
   const handleResizeStop = useCallback(
@@ -187,10 +255,9 @@ export function DashboardBuilder({
       })
 
       const updated = { ...dashboard, widgets: updatedWidgets }
-      updateDashboard(updated)
-      onDashboardChange(updated)
+      persist(updated)
     },
-    [dashboard, onDashboardChange]
+    [dashboard, persist]
   )
 
   const handleAddAnalysis = useCallback(
@@ -206,10 +273,9 @@ export function DashboardBuilder({
         widgets: [...dashboard.widgets, newWidget],
       }
 
-      updateDashboard(updated)
-      onDashboardChange(updated)
+      persist(updated)
     },
-    [dashboard, onDashboardChange]
+    [dashboard, persist]
   )
 
   const handleRemoveWidget = useCallback(
@@ -219,10 +285,9 @@ export function DashboardBuilder({
         widgets: dashboard.widgets.filter((w) => w.id !== widgetId),
       }
 
-      updateDashboard(updated)
-      onDashboardChange(updated)
+      persist(updated)
     },
-    [dashboard, onDashboardChange]
+    [dashboard, persist]
   )
 
   const handleAddFilter = useCallback(
@@ -237,8 +302,7 @@ export function DashboardBuilder({
         filters: [...dashboard.filters, newFilter],
       }
 
-      updateDashboard(updated)
-      onDashboardChange(updated)
+      persist(updated)
 
       setFilterValues((prev) => ({
         ...prev,
@@ -258,7 +322,7 @@ export function DashboardBuilder({
         })
         .finally(() => setLoadingDistinct(false))
     },
-    [dashboard, onDashboardChange]
+    [dashboard, persist]
   )
 
   const handleRemoveFilter = useCallback(
@@ -268,8 +332,7 @@ export function DashboardBuilder({
         filters: dashboard.filters.filter((f) => f.id !== filterId),
       }
 
-      updateDashboard(updated)
-      onDashboardChange(updated)
+      persist(updated)
 
       setFilterValues((prev) => {
         const next = { ...prev }
@@ -282,7 +345,7 @@ export function DashboardBuilder({
         return next
       })
     },
-    [dashboard, onDashboardChange]
+    [dashboard, persist]
   )
 
   const handleFilterValueChange = useCallback(
@@ -314,12 +377,23 @@ export function DashboardBuilder({
       description: data.description,
       appearance: data.appearance,
     }
-    const saved = updateDashboard(updated)
-    onDashboardChange(saved)
+    persist(updated)
+  }
+
+  // Largura do painel: salva imediatamente (fila de PUT) e aplica na hora,
+  // porque o container lê dashboard.appearance.
+  function handleWidthChange(width: DashboardWidth) {
+    if ((dashboard.appearance?.width ?? "default") === width) return
+    persist({ ...dashboard, appearance: { ...dashboard.appearance, width } })
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <div
+      className={cn(
+        dashboardWidthClass(dashboard.appearance),
+        "px-4 sm:px-6 lg:px-8 py-8"
+      )}
+    >
       {/* Navigation */}
       <Link
         href="/paineis"
@@ -368,6 +442,42 @@ export function DashboardBuilder({
               <Info size={14} />
               <span className="hidden sm:inline">Informações</span>
             </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title={`Largura do painel: ${
+                      WIDTH_OPTIONS.find(
+                        (option) =>
+                          option.value === (dashboard.appearance?.width ?? "default")
+                      )?.label
+                    }`}
+                  />
+                }
+              >
+                <StretchHorizontal size={14} />
+                <span className="hidden sm:inline">Largura</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {WIDTH_OPTIONS.map((option) => {
+                  const active =
+                    (dashboard.appearance?.width ?? "default") === option.value
+                  return (
+                    <DropdownMenuItem
+                      key={option.value}
+                      onClick={() => handleWidthChange(option.value)}
+                    >
+                      <span className="flex-1">{option.label}</span>
+                      <span className="text-xs text-slate-400">{option.hint}</span>
+                      {active && <Check size={14} className="text-teal-600" />}
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Button
               variant="outline"
@@ -418,6 +528,19 @@ export function DashboardBuilder({
           </div>
         </div>
       </section>
+
+      {/* Save error — sem retry automático: a próxima ação reenvia */}
+      {saveError && (
+        <section className="mt-4">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            <AlertCircle size={16} className="shrink-0" />
+            <span className="min-w-0 flex-1">{saveError}</span>
+            <span className="text-xs text-red-500">
+              Não foi possível persistir. A próxima alteração reenvia o painel.
+            </span>
+          </div>
+        </section>
+      )}
 
       {/* Filters */}
       {(dashboard.filters.length > 0 || editing) && (

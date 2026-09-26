@@ -1,13 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  AlertCircle,
   BarChart3,
   Inbox,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -29,9 +31,10 @@ import type { Dashboard } from "@/lib/types/dashboard"
 import { DeleteConfirmationDialog } from "@/components/shared/delete-confirmation-dialog"
 import {
   getDashboards,
-  saveDashboard,
+  createDashboard,
   deleteDashboard,
-} from "@/lib/storage/dashboards"
+} from "@/lib/api/dashboards"
+import { ApiError } from "@/lib/api"
 
 function formatDate(iso: string): string {
   try {
@@ -49,39 +52,98 @@ function formatDate(iso: string): string {
 
 export default function PaineisPage() {
   const router = useRouter()
-  const [dashboards, setDashboards] = useState<Dashboard[]>(getDashboards)
+  const [dashboards, setDashboards] = useState<Dashboard[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const [deleteTarget, setDeleteTarget] = useState<Dashboard | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [newDescription, setNewDescription] = useState("")
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
-  function handleDelete() {
-    if (!deleteTarget) return
-    deleteDashboard(deleteTarget.id)
-    setDashboards((prev) => prev.filter((d) => d.id !== deleteTarget.id))
-    setDeleteTarget(null)
+  useEffect(() => {
+    let cancelled = false
+
+    getDashboards()
+      .then((list) => {
+        if (!cancelled) setDashboards(list)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setLoadError(
+          err instanceof ApiError
+            ? err.detail
+            : "Erro ao carregar os dashboards."
+        )
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  function handleRetry() {
+    setDashboards(null)
+    setLoadError(null)
+    setReloadKey((key) => key + 1)
   }
 
-  function handleCreate() {
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
+
+    try {
+      await deleteDashboard(deleteTarget.id)
+      setDashboards((prev) =>
+        (prev ?? []).filter((d) => d.id !== deleteTarget.id)
+      )
+      setDeleteTarget(null)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setDashboards((prev) =>
+          (prev ?? []).filter((d) => d.id !== deleteTarget.id)
+        )
+        setDeleteTarget(null)
+      } else {
+        setDeleteError(
+          err instanceof ApiError ? err.detail : "Erro ao excluir o painel."
+        )
+      }
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleCreate() {
     const trimmed = newName.trim()
-    if (!trimmed) return
+    if (!trimmed || creating) return
 
     setCreating(true)
+    setCreateError(null)
 
-    const dashboard = saveDashboard({
-      name: trimmed,
-      description: newDescription.trim(),
-      widgets: [],
-      filters: [],
-    })
-
-    setDashboards(getDashboards())
-    setCreateOpen(false)
-    setNewName("")
-    setNewDescription("")
-    setCreating(false)
-    router.push(`/paineis/${dashboard.id}`)
+    try {
+      const dashboard = await createDashboard({
+        name: trimmed,
+        description: newDescription.trim(),
+        widgets: [],
+        filters: [],
+      })
+      setDashboards((prev) => [...(prev ?? []), dashboard])
+      setCreateOpen(false)
+      setNewName("")
+      setNewDescription("")
+      router.push(`/paineis/${dashboard.id}`)
+    } catch (err) {
+      setCreateError(
+        err instanceof ApiError ? err.detail : "Erro ao criar o painel."
+      )
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -116,8 +178,35 @@ export default function PaineisPage() {
         </div>
       </section>
 
+      {/* Loading */}
+      {dashboards === null && !loadError && (
+        <section className="mt-8">
+          <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-12">
+            <Loader2 size={20} className="animate-spin text-slate-400" />
+          </div>
+        </section>
+      )}
+
+      {/* Load error */}
+      {dashboards === null && loadError && (
+        <section className="mt-8">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
+            <div className="flex items-center justify-center gap-2 text-sm font-medium text-amber-800">
+              <AlertCircle size={16} />
+              {loadError}
+            </div>
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" size="sm" onClick={handleRetry}>
+                <RefreshCw size={13} />
+                Tentar novamente
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Empty state */}
-      {dashboards.length === 0 ? (
+      {dashboards !== null && dashboards.length === 0 ? (
         <section className="mt-8">
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
@@ -139,7 +228,7 @@ export default function PaineisPage() {
             </Button>
           </div>
         </section>
-      ) : (
+      ) : dashboards !== null ? (
         /* Dashboard cards */
         <section className="mt-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -198,7 +287,7 @@ export default function PaineisPage() {
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={(open) => {
@@ -206,6 +295,7 @@ export default function PaineisPage() {
           setCreateOpen(false)
           setNewName("")
           setNewDescription("")
+          setCreateError(null)
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -217,6 +307,12 @@ export default function PaineisPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {createError && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                <AlertCircle size={15} className="shrink-0" />
+                {createError}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="dashboard-name">Nome *</Label>
               <Input
@@ -227,7 +323,7 @@ export default function PaineisPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    handleCreate()
+                    void handleCreate()
                   }
                 }}
                 autoFocus
@@ -252,12 +348,14 @@ export default function PaineisPage() {
                 setCreateOpen(false)
                 setNewName("")
                 setNewDescription("")
+                setCreateError(null)
               }}
+              disabled={creating}
             >
               Cancelar
             </Button>
             <Button
-              onClick={handleCreate}
+              onClick={() => void handleCreate()}
               disabled={!newName.trim() || creating}
               className="bg-teal-600 text-white hover:bg-teal-700"
             >
@@ -276,10 +374,15 @@ export default function PaineisPage() {
       <DeleteConfirmationDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null)
+          if (!open) {
+            setDeleteTarget(null)
+            setDeleteError(null)
+          }
         }}
         title="Excluir dashboard"
         itemName={deleteTarget?.name ?? ""}
+        loading={deleting}
+        error={deleteError}
         onConfirm={handleDelete}
       />
     </div>

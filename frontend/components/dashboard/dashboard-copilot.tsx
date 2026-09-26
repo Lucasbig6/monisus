@@ -5,9 +5,13 @@ import { Send, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { isAuthenticated } from "@/lib/auth"
+import { getAnalyses } from "@/lib/api/analyses"
+import type { Analysis } from "@/lib/types/analysis"
 import type { Dashboard } from "@/lib/types/dashboard"
 import {
-  getDashboardAnalysisContext,
+  buildDashboardAnalysisContext,
+  emptyDashboardAnalysisContext,
   type DashboardAnalysisContext,
 } from "@/lib/dashboard-analysis-context"
 
@@ -56,11 +60,34 @@ export function DashboardCopilot({
 }: DashboardCopilotProps) {
   const [draft, setDraft] = useState("")
   const [messages, setMessages] = useState<CopilotMessage[]>([])
+  const [analyses, setAnalyses] = useState<Analysis[] | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Só consulta a API quando o painel está aberto e há sessão: o painel
+  // público (/painel/[slug]) nunca dispara request de análises.
+  useEffect(() => {
+    if (!open || !isAuthenticated()) return
+    let cancelled = false
+
+    getAnalyses()
+      .then((list) => {
+        if (!cancelled) setAnalyses(list)
+      })
+      .catch(() => {
+        // contexto é auxiliar: mantém "não carregado" (contexto vazio)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [open])
+
   const context = useMemo(
-    () => getDashboardAnalysisContext(dashboard),
-    [dashboard]
+    () =>
+      analyses === null
+        ? emptyDashboardAnalysisContext(dashboard)
+        : buildDashboardAnalysisContext(dashboard, analyses),
+    [dashboard, analyses]
   )
 
   useEffect(() => {

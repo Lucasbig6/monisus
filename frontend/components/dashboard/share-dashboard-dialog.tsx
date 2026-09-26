@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { Dashboard } from "@/lib/types/dashboard"
-import { getDashboardSharePath } from "@/lib/storage/dashboards"
+import { getDashboardSharePath } from "@/lib/utils"
 
 interface ShareDashboardDialogProps {
   open: boolean

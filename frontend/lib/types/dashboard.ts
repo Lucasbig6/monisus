@@ -18,9 +18,12 @@ export interface DashboardWidget {
   }
 }
 
+export type DashboardWidth = "default" | "wide" | "full"
+
 export interface DashboardAppearance {
   theme?: "light" | "dark"
   showBrand?: boolean
+  width?: DashboardWidth
 }
 
 export interface Dashboard {

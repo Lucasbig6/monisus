@@ -1,6 +1,7 @@
+import type { Analysis } from "@/lib/types/analysis"
 import type { Dashboard } from "@/lib/types/dashboard"
 import type { ChartType } from "@/lib/types/charts"
-import { getAnalysis } from "@/lib/storage/analyses"
+import { getAnalyses } from "@/lib/api/analyses"
 
 /**
  * Contexto estrutural do dashboard para o futuro Copiloto/Agente.
@@ -45,16 +46,18 @@ export interface DashboardAnalysisContext {
 }
 
 /**
- * Monta o contexto do dashboard resolvendo cada analysisId via storage
- * existente (getAnalysis). Não duplica dados de análise no dashboard.
+ * Monta o contexto do dashboard resolvendo cada analysisId na lista já
+ * carregada. Não duplica dados de análise no dashboard.
  */
-export function getDashboardAnalysisContext(
-  dashboard: Dashboard
+export function buildDashboardAnalysisContext(
+  dashboard: Dashboard,
+  analyses: Analysis[]
 ): DashboardAnalysisContext {
+  const byId = new Map(analyses.map((analysis) => [analysis.id, analysis]))
   const widgets: DashboardAnalysisContextWidget[] = []
 
   for (const widget of dashboard.widgets) {
-    const analysis = getAnalysis(widget.analysisId)
+    const analysis = byId.get(widget.analysisId)
     if (!analysis) continue
 
     widgets.push({
@@ -78,4 +81,21 @@ export function getDashboardAnalysisContext(
     },
     widgets,
   }
+}
+
+/** Contexto vazio: dashboard presente, nenhuma análise resolvida. */
+export function emptyDashboardAnalysisContext(
+  dashboard: Dashboard
+): DashboardAnalysisContext {
+  return buildDashboardAnalysisContext(dashboard, [])
+}
+
+/**
+ * Lê as análises da API (1 request, sem N+1) e monta o contexto.
+ */
+export async function getDashboardAnalysisContext(
+  dashboard: Dashboard
+): Promise<DashboardAnalysisContext> {
+  const analyses = await getAnalyses()
+  return buildDashboardAnalysisContext(dashboard, analyses)
 }

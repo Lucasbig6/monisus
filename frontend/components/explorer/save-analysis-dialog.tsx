@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,9 +17,15 @@ import { Label } from "@/components/ui/label"
 interface SaveAnalysisDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (name: string, description: string) => void
+  /**
+   * Sucesso/falha são decididos pelo chamador: ele fecha o diálogo no sucesso e
+   * expõe `error`. Em caso de rejeição os campos são preservados.
+   */
+  onSave: (name: string, description: string) => void | Promise<void>
   title?: string
   dialogDescription?: string
+  saving?: boolean
+  error?: string | null
 }
 
 export function SaveAnalysisDialog({
@@ -27,20 +34,31 @@ export function SaveAnalysisDialog({
   onSave,
   title = "Salvar análise",
   dialogDescription = "Dê um nome para esta análise para encontrá-la facilmente depois.",
+  saving = false,
+  error = null,
 }: SaveAnalysisDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const savingRef = useRef(false)
 
-  function handleSave() {
+  async function handleSave() {
     const trimmed = name.trim()
-    if (!trimmed) return
+    if (!trimmed || saving || savingRef.current) return
 
-    onSave(trimmed, description.trim())
-    setName("")
-    setDescription("")
+    savingRef.current = true
+    try {
+      await onSave(trimmed, description.trim())
+      setName("")
+      setDescription("")
+    } catch {
+      // o chamador controla `error`; campos do usuário permanecem
+    } finally {
+      savingRef.current = false
+    }
   }
 
   function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && saving) return
     if (!nextOpen) {
       setName("")
       setDescription("")
@@ -67,7 +85,7 @@ export function SaveAnalysisDialog({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault()
-                  handleSave()
+                  void handleSave()
                 }
               }}
               autoFocus
@@ -89,17 +107,26 @@ export function SaveAnalysisDialog({
           <Button
             variant="outline"
             onClick={() => handleOpenChange(false)}
+            disabled={saving}
           >
             Cancelar
           </Button>
           <Button
-            onClick={handleSave}
-            disabled={!name.trim()}
+            onClick={() => void handleSave()}
+            disabled={!name.trim() || saving}
             className="bg-teal-600 text-white hover:bg-teal-700"
           >
+            {saving && <Loader2 size={14} className="animate-spin" />}
             Salvar
           </Button>
         </DialogFooter>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

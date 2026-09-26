@@ -19,7 +19,8 @@ import {
 } from "@/components/explorer/visualization-panel"
 import { SaveAnalysisDialog } from "@/components/explorer/save-analysis-dialog"
 import { PublishDatasetDialog } from "@/components/explorer/publish-dataset-dialog"
-import { saveAnalysis } from "@/lib/storage/analyses"
+import { createAnalysis } from "@/lib/api/analyses"
+import { ApiError } from "@/lib/api"
 
 const PAGE_SIZE = 10
 
@@ -84,6 +85,8 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [savingAnalysis, setSavingAnalysis] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
   const isChartMode = viewMode === "chart"
 
@@ -92,21 +95,33 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
     containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-  function handleSaveAnalysis(name: string, description: string) {
-    saveAnalysis({
-      name,
-      description,
-      sql: sql ?? "",
-      databaseId: databaseId ?? 0,
-      dbSchema: dbSchema ?? null,
-      datasetId: datasetId ?? null,
-      chartType: viewMode === "table" ? "table" : chartType,
-      dimension: viewMode === "table" ? null : effectiveDimension,
-      metric: viewMode === "table" ? null : effectiveMetric,
-    })
-    setSaveDialogOpen(false)
-    setSaveSuccess(true)
-    setTimeout(() => setSaveSuccess(false), 3000)
+  async function handleSaveAnalysis(name: string, description: string) {
+    setSavingAnalysis(true)
+    setSaveError(null)
+
+    try {
+      await createAnalysis({
+        name,
+        description,
+        sql: sql ?? "",
+        databaseId: databaseId ?? null,
+        dbSchema: dbSchema ?? null,
+        datasetId: datasetId ?? null,
+        chartType: viewMode === "table" ? "table" : chartType,
+        dimension: viewMode === "table" ? null : effectiveDimension,
+        metric: viewMode === "table" ? null : effectiveMetric,
+      })
+      setSaveDialogOpen(false)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err) {
+      setSaveError(
+        err instanceof ApiError ? err.detail : "Erro ao salvar a análise."
+      )
+      throw err
+    } finally {
+      setSavingAnalysis(false)
+    }
   }
 
   if (loading) {
@@ -390,8 +405,13 @@ export function QueryResult({ data, loading, error, sql, databaseId, dbSchema, d
 
       <SaveAnalysisDialog
         open={saveDialogOpen}
-        onOpenChange={setSaveDialogOpen}
+        onOpenChange={(next) => {
+          if (!next) setSaveError(null)
+          setSaveDialogOpen(next)
+        }}
         onSave={handleSaveAnalysis}
+        saving={savingAnalysis}
+        error={saveError}
         title={isChartMode ? "Salvar gráfico" : "Salvar análise"}
         dialogDescription={
           isChartMode

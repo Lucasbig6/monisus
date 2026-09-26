@@ -1,15 +1,18 @@
-.PHONY: dev test lint format install clean help
+.PHONY: dev test lint format install clean help check-venv
 
 help: ## Mostra ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-dev: ## Inicia servidor com reload
+check-venv:
+	@test -x .venv/bin/uvicorn || { echo "Erro: backend/.venv não encontrado. Rode: make -C backend install"; exit 1; }
+
+dev: check-venv ## Inicia servidor com reload
 	.venv/bin/uvicorn app.main:app --reload
 
-test: ## Roda testes
+test: check-venv ## Roda testes
 	.venv/bin/pytest
 
-lint: ## Verifica código com ruff
+lint: check-venv ## Verifica código com ruff
 	.venv/bin/ruff check .
 
 format: ## Formata código com ruff

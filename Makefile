@@ -1,10 +1,17 @@
+SHELL := /bin/bash
+
 .PHONY: dev dev-f dev-b build lint test stop stop-f stop-b superset-up superset-down superset-seed db-up db-down db-migrate db-seed down clean help
 
 help: ## Mostra ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-dev: ## Inicia frontend + backend
-	@make dev-f & make dev-b
+dev: db-up db-migrate ## Sobe stack completa (db + backend + frontend)
+	@trap '$(MAKE) stop' INT TERM; \
+	$(MAKE) dev-f & pid_f=$$!; \
+	$(MAKE) dev-b & pid_b=$$!; \
+	wait -n $$pid_f $$pid_b; st=$$?; \
+	$(MAKE) stop; \
+	exit $$st
 
 dev-f: ## Inicia apenas frontend
 	$(MAKE) -C frontend dev
@@ -13,14 +20,14 @@ dev-b: ## Inicia apenas backend
 	$(MAKE) -C backend dev
 
 stop: ## Para frontend + backend
-	@make stop-f || true
-	@make stop-b || true
+	@$(MAKE) stop-f || true
+	@$(MAKE) stop-b || true
 
 stop-f: ## Para apenas frontend
-	@pkill -f "next dev" 2>/dev/null && echo "Frontend parado" || echo "Frontend não rodando"
+	@pkill -f "[n]ext dev" 2>/dev/null && echo "Frontend parado" || echo "Frontend não rodando"
 
 stop-b: ## Para apenas backend
-	@pkill -f "uvicorn" 2>/dev/null && echo "Backend parado" || echo "Backend não rodando"
+	@pkill -f "[u]vicorn" 2>/dev/null && echo "Backend parado" || echo "Backend não rodando"
 
 build: ## Builda frontend
 	$(MAKE) -C frontend build
@@ -47,20 +54,22 @@ superset-seed: ## Popula dados DEMO no Superset
 	docker exec superset_app python /app/seed_demo.py
 
 db-up: ## Sobe o PostgreSQL do Saude360 (porta 5433)
-	docker compose up -d saude360-postgres
+	docker compose up -d --wait saude360-postgres
 
 db-down: ## Para o PostgreSQL do Saude360
 	docker compose stop saude360-postgres
 
 db-migrate: ## Aplica migrations do Alembic no banco do Saude360
+	@test -x backend/.venv/bin/alembic || { echo "Erro: backend/.venv não encontrado. Rode: make -C backend install"; exit 1; }
 	cd backend && .venv/bin/alembic upgrade head
 
 db-seed: ## Seed inicial (roles + usuário admin)
+	@test -x backend/.venv/bin/python || { echo "Erro: backend/.venv não encontrado. Rode: make -C backend install"; exit 1; }
 	cd backend && .venv/bin/python -m app.db.seed
 
 down: ## Para tudo (frontend + backend + superset)
-	@make stop
-	@make superset-down
+	@$(MAKE) stop
+	@$(MAKE) superset-down
 
 clean: ## Limpa caches
 	$(MAKE) -C frontend clean

@@ -1,0 +1,288 @@
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../api"
+import type {
+  Dashboard,
+  DashboardAppearance,
+  DashboardFilter,
+  DashboardWidget,
+} from "@/lib/types/dashboard"
+
+/**
+ * Payload cru de `GET/POST/PUT /api/dashboards` (camelCase do backend).
+ *
+ * Divergências conhecidas em relação ao tipo `Dashboard` do frontend:
+ *   - description   : string|null -> string ("" quando null)
+ *   - appearance    : dict livre   -> DashboardAppearance (keys extras ignoradas)
+ *   - datasetId     : number|null  -> number (0 quando null; sentinela, nunca é dataset real)
+ *   - defaultValue  : string|string[]|null -> string|string[] ("" quando null)
+ *   - scope         : string|string[]|null -> "dashboard" | string[] (o frontend só
+ *                     grava "dashboard" ou array; outra string qualquer é repassada)
+ */
+export interface ApiLayout {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface ApiWidget {
+  id: string
+  analysisId: string
+  layout: ApiLayout
+}
+
+export interface ApiFilter {
+  id: string
+  datasetId: number | null
+  column: string
+  operator: string
+  defaultValue: string | string[] | null
+  scope: string | string[] | null
+}
+
+export interface ApiDashboard {
+  id: string
+  name: string
+  description: string | null
+  slug: string
+  appearance: Record<string, unknown>
+  widgets: ApiWidget[]
+  filters: ApiFilter[]
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DashboardPayload {
+  name: string
+  description?: string | null
+  appearance?: DashboardAppearance
+  widgets?: DashboardWidget[]
+  filters?: DashboardFilter[]
+}
+
+export interface DashboardInput extends DashboardPayload {
+  name: string
+}
+
+const FILTER_OPERATORS = new Set<string>([
+  "eq",
+  "in",
+  "gte",
+  "lte",
+  "between",
+])
+
+function contractError(what: string): ApiError {
+  return new ApiError(502, `Resposta inesperada da API (${what})`)
+}
+
+function assertApiDashboard(raw: unknown): ApiDashboard {
+  const value = raw as ApiDashboard | null
+  if (
+    !value ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.slug !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string" ||
+    !Array.isArray(value.widgets) ||
+    !Array.isArray(value.filters)
+  ) {
+    throw contractError("/api/dashboards: campos obrigatórios ausentes")
+  }
+  return value
+}
+
+function finite(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : fallback
+}
+
+function toLayout(layout: ApiLayout | null | undefined): DashboardWidget["layout"] {
+  return {
+    x: finite(layout?.x, 0),
+    y: finite(layout?.y, 0),
+    w: finite(layout?.w, 4),
+    h: finite(layout?.h, 4),
+  }
+}
+
+function toWidgets(rawWidgets: ApiWidget[]): DashboardWidget[] {
+  const widgets = rawWidgets.map((widget, index) => {
+    if (
+      typeof widget?.id !== "string" ||
+      typeof widget.analysisId !== "string"
+    ) {
+      throw contractError(`/api/dashboards: widget[${index}] inválido`)
+    }
+    return {
+      id: widget.id,
+      analysisId: widget.analysisId,
+      layout: toLayout(widget.layout),
+    }
+  })
+
+  // ordem determinística: a API devolve created_at, a UI espera grade (y, x)
+  return widgets.sort(
+    (a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x
+  )
+}
+
+function toFilters(rawFilters: ApiFilter[]): DashboardFilter[] {
+  return rawFilters.map((filter, index) => {
+    if (
+      typeof filter?.id !== "string" ||
+      typeof filter.column !== "string" ||
+      !filter.column ||
+      typeof filter.operator !== "string" ||
+      !FILTER_OPERATORS.has(filter.operator)
+    ) {
+      throw contractError(`/api/dashboards: filter[${index}] inválido`)
+    }
+
+    // a API aceita qualquer string; o frontend só grava "dashboard" ou array
+    const scope = (filter.scope ?? "dashboard") as DashboardFilter["scope"]
+
+    return {
+      id: filter.id,
+      datasetId: typeof filter.datasetId === "number" ? filter.datasetId : 0,
+      column: filter.column,
+      operator: filter.operator as DashboardFilter["operator"],
+      defaultValue: filter.defaultValue ?? "",
+      scope,
+    }
+  })
+}
+
+function toAppearance(raw: Record<string, unknown> | null): DashboardAppearance {
+  if (raw === null || raw === undefined) return {}
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw contractError("/api/dashboards: appearance inválido")
+  }
+  // a API guarda dict livre; só theme/showBrand são do tipo do frontend
+  return raw as DashboardAppearance
+}
+
+export function toDashboard(raw: unknown): Dashboard {
+  const value = assertApiDashboard(raw)
+
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description ?? "",
+    slug: value.slug,
+    widgets: toWidgets(value.widgets),
+    filters: toFilters(value.filters),
+    appearance: toAppearance(value.appearance),
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  }
+}
+
+/**
+ * Widgets JSON-safe. A sentinela `y: Infinity` ("novo, embaixo") não sobrevive
+ * ao JSON: ela é convertida para a primeira linha livre abaixo dos widgets já
+ * posicionados, para o widget não voltar ao topo ao recarregar.
+ */
+function toWidgetsPayload(widgets: DashboardWidget[]): DashboardWidget[] {
+  const appendY = widgets.reduce((max, widget) => {
+    const y = widget.layout?.y
+    const h = widget.layout?.h
+    if (!Number.isFinite(y) || !Number.isFinite(h)) return max
+    return Math.max(max, y + h)
+  }, 0)
+
+  return widgets.map((widget) => ({
+    id: widget.id,
+    analysisId: widget.analysisId,
+    layout: {
+      x: finite(widget.layout?.x, 0),
+      y: Number.isFinite(widget.layout?.y) ? widget.layout.y : appendY,
+      w: finite(widget.layout?.w, 4),
+      h: finite(widget.layout?.h, 4),
+    },
+  }))
+}
+
+/**
+ * PUT completo. `slug` NUNCA é enviado: a identidade do slug é do backend.
+ */
+export function toDashboardPayload(dashboard: Dashboard): DashboardPayload {
+  return {
+    name: dashboard.name,
+    description: dashboard.description,
+    appearance: dashboard.appearance ?? {},
+    widgets: toWidgetsPayload(dashboard.widgets),
+    filters: dashboard.filters.map((filter) => ({
+      id: filter.id,
+      datasetId: filter.datasetId,
+      column: filter.column,
+      operator: filter.operator,
+      defaultValue: filter.defaultValue,
+      scope: filter.scope,
+    })),
+  }
+}
+
+function toCreatePayload(data: DashboardInput): DashboardPayload {
+  return {
+    name: data.name,
+    description: data.description ?? null,
+    appearance: data.appearance ?? {},
+    widgets: data.widgets ? toWidgetsPayload(data.widgets) : undefined,
+    filters: data.filters?.map((filter) => ({
+      id: filter.id,
+      datasetId: filter.datasetId,
+      column: filter.column,
+      operator: filter.operator,
+      defaultValue: filter.defaultValue,
+      scope: filter.scope,
+    })),
+  }
+}
+
+export async function getDashboards(): Promise<Dashboard[]> {
+  const raw = await apiGet<unknown>("/api/dashboards")
+  if (!Array.isArray(raw)) {
+    throw contractError("/api/dashboards: esperava uma lista")
+  }
+  return raw.map(toDashboard)
+}
+
+export async function getDashboard(id: string): Promise<Dashboard | null> {
+  try {
+    return toDashboard(await apiGet<unknown>(`/api/dashboards/${id}`))
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
+  }
+}
+
+export async function getDashboardBySlug(slug: string): Promise<Dashboard | null> {
+  try {
+    return toDashboard(
+      await apiGet<unknown>(`/api/dashboards/by-slug/${encodeURIComponent(slug)}`)
+    )
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
+  }
+}
+
+export async function createDashboard(data: DashboardInput): Promise<Dashboard> {
+  const raw = await apiPost<unknown>("/api/dashboards", toCreatePayload(data))
+  return toDashboard(raw)
+}
+
+export async function updateDashboard(
+  id: string,
+  payload: DashboardPayload
+): Promise<Dashboard> {
+  const raw = await apiPut<unknown>(`/api/dashboards/${id}`, payload)
+  return toDashboard(raw)
+}
+
+export async function deleteDashboard(id: string): Promise<void> {
+  await apiDelete(`/api/dashboards/${id}`)
+}

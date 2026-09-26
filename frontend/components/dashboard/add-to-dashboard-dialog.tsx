@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { BarChart3, Plus } from "lucide-react"
+import { AlertCircle, BarChart3, Loader2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,9 +18,11 @@ import type { Analysis } from "@/lib/types/analysis"
 import type { Dashboard, DashboardWidget } from "@/lib/types/dashboard"
 import {
   getDashboards,
-  saveDashboard,
+  createDashboard,
   updateDashboard,
-} from "@/lib/storage/dashboards"
+  toDashboardPayload,
+} from "@/lib/api/dashboards"
+import { ApiError } from "@/lib/api"
 
 interface AddToDashboardDialogProps {
   open: boolean
@@ -46,15 +48,47 @@ export function AddToDashboardDialog({
   const [newName, setNewName] = useState("")
   const [feedback, setFeedback] = useState<string | null>(null)
 
-  const dashboards = useMemo(() => {
-    if (!open || typeof window === "undefined") return []
-    return getDashboards()
-  }, [open])
+  const [dashboards, setDashboards] = useState<Dashboard[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      setLoadError(null)
+      setDashboards(null)
+      try {
+        const list = await getDashboards()
+        if (!cancelled) setDashboards(list)
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(
+            err instanceof ApiError
+              ? err.detail
+              : "Erro ao carregar dashboards."
+          )
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [open, reloadKey])
 
   const alreadyIn = useMemo(() => {
     if (!analysis) return new Set<string>()
     return new Set(
-      dashboards
+      (dashboards ?? [])
         .filter((d) => d.widgets.some((w) => w.analysisId === analysis.id))
         .map((d) => d.id)
     )
@@ -65,39 +99,64 @@ export function AddToDashboardDialog({
       setCreateMode(false)
       setNewName("")
       setFeedback(null)
+      setActionError(null)
     }
     onOpenChange(nextOpen)
   }
 
-  function addWidgetToDashboard(dashboard: Dashboard) {
-    if (!analysis) return
+  async function addWidgetToDashboard(dashboard: Dashboard) {
+    if (!analysis || saving) return
     if (dashboard.widgets.some((w) => w.analysisId === analysis.id)) {
       setFeedback(`Já está em "${dashboard.name}".`)
       return
     }
 
+    setSaving(true)
+    setActionError(null)
+
     const updated: Dashboard = {
       ...dashboard,
       widgets: [...dashboard.widgets, createWidget(analysis.id)],
     }
-    updateDashboard(updated)
-    handleOpenChange(false)
-    router.push(`/paineis/${dashboard.id}`)
+
+    try {
+      await updateDashboard(dashboard.id, toDashboardPayload(updated))
+      handleOpenChange(false)
+      router.push(`/paineis/${dashboard.id}`)
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? err.detail
+          : "Erro ao adicionar ao painel."
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     const trimmed = newName.trim()
-    if (!trimmed || !analysis) return
+    if (!trimmed || !analysis || saving) return
 
-    const dashboard = saveDashboard({
-      name: trimmed,
-      description: "",
-      widgets: [createWidget(analysis.id)],
-      filters: [],
-    })
+    setSaving(true)
+    setActionError(null)
 
-    handleOpenChange(false)
-    router.push(`/paineis/${dashboard.id}`)
+    try {
+      const dashboard = await createDashboard({
+        name: trimmed,
+        description: "",
+        widgets: [createWidget(analysis.id)],
+        filters: [],
+      })
+      handleOpenChange(false)
+      router.push(`/paineis/${dashboard.id}`)
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError ? err.detail : "Erro ao criar o painel."
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!analysis) return null
@@ -119,9 +178,31 @@ export function AddToDashboardDialog({
           </p>
         )}
 
+        {actionError && (
+          <p className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            <AlertCircle size={14} className="shrink-0" />
+            {actionError}
+          </p>
+        )}
+
         {!createMode ? (
           <div className="space-y-2 py-1">
-            {dashboards.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-slate-400" />
+              </div>
+            ) : loadError ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-center">
+                <p className="text-xs text-amber-800">{loadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                  className="mt-2 text-xs font-medium text-amber-900 underline"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : !dashboards || dashboards.length === 0 ? (
               <p className="text-sm text-slate-500">
                 Nenhum dashboard criado ainda.
               </p>
@@ -133,12 +214,16 @@ export function AddToDashboardDialog({
                     <button
                       key={d.id}
                       type="button"
-                      disabled={inThis}
-                      onClick={() => addWidgetToDashboard(d)}
+                      disabled={inThis || saving}
+                      onClick={() => void addWidgetToDashboard(d)}
                       className="flex w-full items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50/50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                        <BarChart3 size={16} />
+                        {saving && !inThis ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <BarChart3 size={16} />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-slate-900">
@@ -179,7 +264,7 @@ export function AddToDashboardDialog({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    handleCreate()
+                    void handleCreate()
                   }
                 }}
                 autoFocus
@@ -197,15 +282,20 @@ export function AddToDashboardDialog({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            disabled={saving}
+          >
             Cancelar
           </Button>
           {createMode && (
             <Button
-              onClick={handleCreate}
-              disabled={!newName.trim()}
+              onClick={() => void handleCreate()}
+              disabled={!newName.trim() || saving}
               className="bg-teal-600 text-white hover:bg-teal-700"
             >
+              {saving && <Loader2 size={14} className="animate-spin" />}
               <Plus size={14} />
               Criar e adicionar
             </Button>

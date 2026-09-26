@@ -3,12 +3,14 @@
 import { useCallback, use, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
+  AlertCircle,
   ArrowLeft,
   CheckCircle,
   Copy,
   FileChartColumn,
   Loader2,
   Play,
+  RefreshCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,7 +24,7 @@ import {
 import { ChartRenderer } from "@/components/explorer/chart-renderer"
 import type { Analysis } from "@/lib/types/analysis"
 import { chartTypeLabel, chartTypeIcon } from "@/lib/types/charts"
-import { getAnalysis } from "@/lib/storage/analyses"
+import { getAnalysis } from "@/lib/api/analyses"
 import { executeQuery } from "@/lib/api/queries"
 import { ApiError } from "@/lib/api"
 
@@ -48,13 +50,37 @@ export default function AnaliseDetailPage({
   const { id } = use(params)
 
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [loadingAnalysis, setLoadingAnalysis] = useState(true)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [loadTick, setLoadTick] = useState(0)
   const loadedRef = useRef(false)
 
   useEffect(() => {
     if (loadedRef.current) return
     loadedRef.current = true
-    setAnalysis(getAnalysis(id))
-  }, [id])
+
+    getAnalysis(id)
+      .then((value) => {
+        setAnalysis(value)
+        setLoadingAnalysis(false)
+      })
+      .catch((err) => {
+        setAnalysisError(
+          err instanceof ApiError
+            ? err.detail
+            : "Erro ao carregar a análise."
+        )
+        setLoadingAnalysis(false)
+      })
+  }, [id, loadTick])
+
+  function handleRetryLoad() {
+    loadedRef.current = false
+    setAnalysis(null)
+    setAnalysisError(null)
+    setLoadingAnalysis(true)
+    setLoadTick((tick) => tick + 1)
+  }
 
   const [result, setResult] = useState<Record<string, unknown>[] | null>(null)
   const [executing, setExecuting] = useState(false)
@@ -106,6 +132,56 @@ export default function AnaliseDetailPage({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  if (loadingAnalysis) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <Link
+          href="/analises"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-teal-600 transition-colors"
+        >
+          <ArrowLeft size={14} />
+          Minhas Análises
+        </Link>
+
+        <div className="mt-8 flex items-center justify-center rounded-xl border border-slate-200 bg-white p-12">
+          <Loader2 size={20} className="animate-spin text-slate-400" />
+        </div>
+      </div>
+    )
+  }
+
+  if (analysisError) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <Link
+          href="/analises"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-teal-600 transition-colors"
+        >
+          <ArrowLeft size={14} />
+          Minhas Análises
+        </Link>
+
+        <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
+          <div className="flex items-center justify-center gap-2 text-sm font-medium text-amber-800">
+            <AlertCircle size={16} />
+            {analysisError}
+          </div>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleRetryLoad}>
+              <RefreshCw size={13} />
+              Tentar novamente
+            </Button>
+            <Link href="/analises">
+              <Button variant="outline" size="sm">
+                Minhas Análises
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!analysis) {

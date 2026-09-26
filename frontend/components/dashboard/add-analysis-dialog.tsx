@@ -1,10 +1,13 @@
 "use client"
 
 import {
+  AlertCircle,
   FileChartColumn,
+  Loader2,
+  RefreshCw,
   Search,
 } from "lucide-react"
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,7 +19,8 @@ import {
 import { Input } from "@/components/ui/input"
 import type { Analysis } from "@/lib/types/analysis"
 import { chartTypeLabel, chartTypeIcon } from "@/lib/types/charts"
-import { getAnalyses } from "@/lib/storage/analyses"
+import { getAnalyses } from "@/lib/api/analyses"
+import { ApiError } from "@/lib/api"
 
 interface AddAnalysisDialogProps {
   open: boolean
@@ -32,14 +36,47 @@ export function AddAnalysisDialog({
   excludeIds,
 }: AddAnalysisDialogProps) {
   const [search, setSearch] = useState("")
+  const [analyses, setAnalyses] = useState<Analysis[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
-  const analyses = useMemo(() => {
-    const all = getAnalyses()
-    const filtered = all.filter((a) => !excludeIds.includes(a.id))
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      setLoadError(null)
+      setAnalyses(null)
+      try {
+        const list = await getAnalyses()
+        if (!cancelled) setAnalyses(list)
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(
+            err instanceof ApiError
+              ? err.detail
+              : "Erro ao carregar análises."
+          )
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [open, reloadKey])
+
+  const filtered = useMemo(() => {
+    const available = (analyses ?? []).filter((a) => !excludeIds.includes(a.id))
 
     const searched = !search.trim()
-      ? filtered
-      : filtered.filter((a) => {
+      ? available
+      : available.filter((a) => {
           const term = search.toLowerCase()
           return (
             a.name.toLowerCase().includes(term) ||
@@ -53,7 +90,7 @@ export function AddAnalysisDialog({
       if (aChart !== bChart) return aChart - bChart
       return a.name.localeCompare(b.name)
     })
-  }, [excludeIds, search])
+  }, [analyses, excludeIds, search])
 
   function handleSelect(analysis: Analysis) {
     onSelect(analysis)
@@ -94,7 +131,27 @@ export function AddAnalysisDialog({
         </div>
 
         <div className="mt-2 max-h-80 overflow-y-auto">
-          {analyses.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 size={20} className="animate-spin text-slate-400" />
+            </div>
+          ) : loadError ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4 text-center">
+              <div className="flex items-center justify-center gap-2 text-sm text-amber-800">
+                <AlertCircle size={15} />
+                {loadError}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 bg-white"
+                onClick={() => setReloadKey((key) => key + 1)}
+              >
+                <RefreshCw size={13} />
+                Tentar novamente
+              </Button>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
                 <FileChartColumn size={18} className="text-slate-400" />
@@ -110,7 +167,7 @@ export function AddAnalysisDialog({
             </div>
           ) : (
             <div className="space-y-2">
-              {analyses.map((analysis) => {
+              {filtered.map((analysis) => {
                 const Icon = chartTypeIcon[analysis.chartType]
 
                 return (

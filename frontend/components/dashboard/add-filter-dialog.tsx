@@ -14,9 +14,10 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { DashboardFilter } from "@/lib/types/dashboard"
+import type { Analysis } from "@/lib/types/analysis"
 import type { DatasetListItem, DatasetColumn } from "@/lib/api/datasets"
 import { listDatasets, getDataset, getDistinctValues } from "@/lib/api/datasets"
-import { getAnalyses } from "@/lib/storage/analyses"
+import { getAnalyses } from "@/lib/api/analyses"
 import { ApiError } from "@/lib/api"
 
 const OPERATORS: { value: DashboardFilter["operator"]; label: string }[] = [
@@ -49,6 +50,7 @@ export function AddFilterDialog({
   const [error, setError] = useState<string | null>(null)
 
   const [datasets, setDatasets] = useState<DatasetListItem[]>([])
+  const [analyses, setAnalyses] = useState<Analysis[]>([])
   const [selectedDataset, setSelectedDataset] = useState<DatasetListItem | null>(null)
 
   const [columns, setColumns] = useState<DatasetColumn[]>([])
@@ -60,7 +62,7 @@ export function AddFilterDialog({
   const [scope, setScope] = useState<"dashboard" | string[]>("dashboard")
   const [scopeWidgetIds, setScopeWidgetIds] = useState<string[]>([])
 
-  const analysesInDashboard = getAnalyses().filter((a) =>
+  const analysesInDashboard = analyses.filter((a) =>
     dashboardWidgetAnalysisIds.includes(a.id)
   )
 
@@ -93,10 +95,17 @@ export function AddFilterDialog({
     async function load() {
       setLoading(true)
       try {
-        const data = await listDatasets()
+        const [data, analysisList] = await Promise.all([
+          listDatasets(),
+          getAnalyses(),
+        ])
         setDatasets(data.result ?? [])
+        setAnalyses(analysisList)
       } catch (err) {
-        const msg = err instanceof ApiError ? err.detail : "Erro ao carregar datasets."
+        const msg =
+          err instanceof ApiError
+            ? err.detail
+            : "Erro ao carregar datasets e análises."
         setError(msg)
       } finally {
         setLoading(false)

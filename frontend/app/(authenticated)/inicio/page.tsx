@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils"
 import type { Dashboard } from "@/lib/types/dashboard"
 import type { Analysis } from "@/lib/types/analysis"
 import { chartTypeIcon, chartTypeLabel } from "@/lib/types/charts"
-import { getDashboards } from "@/lib/storage/dashboards"
-import { getAnalyses } from "@/lib/storage/analyses"
+import { getDashboards } from "@/lib/api/dashboards"
+import { getAnalyses } from "@/lib/api/analyses"
 import {
   listDatasets,
   datasetDisplayName,
@@ -365,6 +365,8 @@ export default function Home() {
   const [query, setQuery] = useState("")
   const [dashboards, setDashboards] = useState<Dashboard[]>([])
   const [analyses, setAnalyses] = useState<Analysis[]>([])
+  const [loadingDomain, setLoadingDomain] = useState(true)
+  const [domainError, setDomainError] = useState<string | null>(null)
   const [datasets, setDatasets] = useState<DatasetListItem[]>([])
   const [loadingDatasets, setLoadingDatasets] = useState(true)
   const [datasetsError, setDatasetsError] = useState<string | null>(null)
@@ -386,11 +388,36 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      setDashboards(getDashboards())
-      setAnalyses(getAnalyses())
-    })
-    return () => cancelAnimationFrame(raf)
+    let cancelled = false
+
+    async function load() {
+      try {
+        const [dashboardList, analysisList] = await Promise.all([
+          getDashboards(),
+          getAnalyses(),
+        ])
+        if (!cancelled) {
+          setDashboards(dashboardList)
+          setAnalyses(analysisList)
+          setDomainError(null)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDomainError(
+            err instanceof ApiError
+              ? err.detail
+              : "Erro ao carregar painéis e análises."
+          )
+        }
+      } finally {
+        if (!cancelled) setLoadingDomain(false)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -592,9 +619,11 @@ export default function Home() {
             title="Dashboards"
             description="Painéis para acompanhamento de indicadores."
             countLabel={
-              dashboards.length === 1
-                ? "1 painel"
-                : `${dashboards.length} painéis`
+              loadingDomain
+                ? "…"
+                : dashboards.length === 1
+                  ? "1 painel"
+                  : `${dashboards.length} painéis`
             }
             createHref="/paineis"
             createLabel="Novo"
@@ -606,9 +635,11 @@ export default function Home() {
             title="Gráficos"
             description="Visualizações salvas a partir de consultas."
             countLabel={
-              chartItems.length === 1
-                ? "1 gráfico"
-                : `${chartItems.length} gráficos`
+              loadingDomain
+                ? "…"
+                : chartItems.length === 1
+                  ? "1 gráfico"
+                  : `${chartItems.length} gráficos`
             }
             createHref="/explorar"
             createLabel="Novo"
@@ -620,9 +651,11 @@ export default function Home() {
             title="Análises"
             description="Consultas e tabelas analíticas salvas."
             countLabel={
-              analysisItems.length === 1
-                ? "1 análise"
-                : `${analysisItems.length} análises`
+              loadingDomain
+                ? "…"
+                : analysisItems.length === 1
+                  ? "1 análise"
+                  : `${analysisItems.length} análises`
             }
             createHref="/explorar"
             createLabel="Nova"
@@ -646,7 +679,20 @@ export default function Home() {
         </div>
       </section>
 
-      {showSearchResults ? (
+      {loadingDomain ? (
+        <section className="pt-6" aria-label="Carregando painéis e análises">
+          <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
+            <Loader2 size={16} className="animate-spin text-teal-600" />
+            Carregando painéis e análises...
+          </div>
+        </section>
+      ) : domainError ? (
+        <section className="pt-6" aria-label="Erro ao carregar">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+            {domainError}
+          </div>
+        </section>
+      ) : showSearchResults ? (
         <section className="pt-6" aria-label="Resultados da busca">
           <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200">
             <div className="flex items-center gap-2">

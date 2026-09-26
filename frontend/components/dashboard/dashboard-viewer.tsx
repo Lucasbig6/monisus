@@ -11,7 +11,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn, dashboardWidthClass } from "@/lib/utils"
 import type { Dashboard } from "@/lib/types/dashboard"
 import { DashboardWidgetView } from "./dashboard-widget"
 import { ShareDashboardDialog } from "./share-dashboard-dialog"
@@ -92,7 +92,8 @@ export function DashboardViewer({
     >
       <div
         className={cn(
-          "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 transition-[padding-right] duration-200",
+          dashboardWidthClass(dashboard.appearance),
+          "px-4 sm:px-6 lg:px-8 py-6 sm:py-8 transition-[padding-right] duration-200",
           copilotOpen && "lg:pr-[24rem] xl:pr-[26rem]"
         )}
       >

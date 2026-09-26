@@ -55,10 +55,11 @@ export function EditDashboardInfoDialog({
     const trimmed = name.trim()
     if (!trimmed) return
 
+    // spread preserva `width`, que agora é editado só na toolbar
     onSave({
       name: trimmed,
       description: description.trim(),
-      appearance: { theme, showBrand },
+      appearance: { ...dashboard.appearance, theme, showBrand },
     })
     onOpenChange(false)
   }

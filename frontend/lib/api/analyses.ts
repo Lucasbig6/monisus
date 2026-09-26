@@ -1,0 +1,133 @@
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../api"
+import type { Analysis } from "@/lib/types/analysis"
+import { chartTypeIcon } from "@/lib/types/charts"
+
+/**
+ * Payload cru de `GET/POST/PUT /api/analyses` (camelCase do backend).
+ *
+ * Divergências conhecidas em relação ao tipo `Analysis` do frontend
+ * (a API espelha o banco, onde os campos são nullable):
+ *   - description/sql      : string|null  -> string  ("" quando null)
+ *   - databaseId           : number|null  -> number  (0 quando null; falsy, como antes)
+ *   - chartType            : string|null  -> ChartType (fallback "table" se desconhecido)
+ *   - createdBy            : existe só na API, fora do tipo do frontend
+ */
+export interface ApiAnalysis {
+  id: string
+  name: string
+  description: string | null
+  sql: string | null
+  databaseId: number | null
+  dbSchema: string | null
+  datasetId: number | null
+  chartType: string | null
+  dimension: string | null
+  metric: string | null
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AnalysisInput {
+  name: string
+  description?: string | null
+  sql?: string | null
+  databaseId?: number | null
+  dbSchema?: string | null
+  datasetId?: number | null
+  chartType?: string | null
+  dimension?: string | null
+  metric?: string | null
+}
+
+function contractError(what: string): ApiError {
+  return new ApiError(502, `Resposta inesperada da API (${what})`)
+}
+
+function assertApiAnalysis(raw: unknown): ApiAnalysis {
+  const value = raw as ApiAnalysis | null
+  if (
+    !value ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.createdAt !== "string" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    throw contractError("/api/analyses: campos obrigatórios ausentes")
+  }
+  return value
+}
+
+function assertChartType(value: string | null): Analysis["chartType"] {
+  if (value && value in chartTypeIcon) {
+    return value as Analysis["chartType"]
+  }
+  return "table"
+}
+
+export function toAnalysis(raw: unknown): Analysis {
+  const value = assertApiAnalysis(raw)
+
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description ?? "",
+    sql: value.sql ?? "",
+    databaseId: value.databaseId ?? 0,
+    dbSchema: value.dbSchema ?? null,
+    datasetId: value.datasetId ?? null,
+    chartType: assertChartType(value.chartType),
+    dimension: value.dimension ?? null,
+    metric: value.metric ?? null,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  }
+}
+
+function toAnalysisPayload(data: AnalysisInput): Record<string, unknown> {
+  return {
+    name: data.name,
+    description: data.description ?? null,
+    sql: data.sql ?? null,
+    databaseId: data.databaseId || null,
+    dbSchema: data.dbSchema ?? null,
+    datasetId: data.datasetId ?? null,
+    chartType: data.chartType ?? null,
+    dimension: data.dimension ?? null,
+    metric: data.metric ?? null,
+  }
+}
+
+export async function getAnalyses(): Promise<Analysis[]> {
+  const raw = await apiGet<unknown>("/api/analyses")
+  if (!Array.isArray(raw)) {
+    throw contractError("/api/analyses: esperava uma lista")
+  }
+  return raw.map(toAnalysis)
+}
+
+export async function getAnalysis(id: string): Promise<Analysis | null> {
+  try {
+    return toAnalysis(await apiGet<unknown>(`/api/analyses/${id}`))
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
+  }
+}
+
+export async function createAnalysis(data: AnalysisInput): Promise<Analysis> {
+  const raw = await apiPost<unknown>("/api/analyses", toAnalysisPayload(data))
+  return toAnalysis(raw)
+}
+
+export async function updateAnalysis(
+  id: string,
+  data: AnalysisInput
+): Promise<Analysis> {
+  const raw = await apiPut<unknown>(`/api/analyses/${id}`, toAnalysisPayload(data))
+  return toAnalysis(raw)
+}
+
+export async function deleteAnalysis(id: string): Promise<void> {
+  await apiDelete(`/api/analyses/${id}`)
+}

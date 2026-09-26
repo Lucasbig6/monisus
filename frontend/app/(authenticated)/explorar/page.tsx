@@ -24,7 +24,8 @@ import {
 import { executeQuery } from "@/lib/api/queries"
 import { generateExplorationSql, generatePreviewSql } from "@/lib/explorer/sql"
 import { ApiError } from "@/lib/api"
-import { getAnalysis } from "@/lib/storage/analyses"
+import { getAnalysis } from "@/lib/api/analyses"
+import type { Analysis } from "@/lib/types/analysis"
 
 const SqlEditor = dynamic(
   () =>
@@ -55,7 +56,9 @@ function ExplorarContent() {
   const [executing, setExecuting] = useState(false)
   const [executeError, setExecuteError] = useState<string | null>(null)
 
+  const [restoreAnalysis, setRestoreAnalysis] = useState<Analysis | null>(null)
   const analysisLoadedRef = useRef(false)
+  const restoreAppliedRef = useRef(false)
   const datasetIdLoadedRef = useRef(false)
 
   useEffect(() => {
@@ -157,13 +160,28 @@ function ExplorarContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetIdParam, loadingDatasets, datasets])
 
+  // 1) resolve o ?analysisId uma única vez (nunca dispara request repetido)
+  // Sem flag `cancelled`: com o guard de loadedRef, Strict Mode descartaria o
+  // resultado da 1ª execução e a restauração nunca aplicaria.
   useEffect(() => {
-    if (!analysisId || analysisLoadedRef.current || loadingDatasets) return
-
-    const analysis = getAnalysis(analysisId)
-    if (!analysis) return
-
+    if (!analysisId || analysisLoadedRef.current) return
     analysisLoadedRef.current = true
+
+    getAnalysis(analysisId)
+      .then((value) => setRestoreAnalysis(value))
+      .catch(() => {
+        // análise inacessível: segue sem restauração, editor utilizável
+      })
+  }, [analysisId])
+
+  // 2) aplica a restauração quando análise e datasets estiverem resolvidos
+  useEffect(() => {
+    if (!restoreAnalysis || loadingDatasets || restoreAppliedRef.current) {
+      return
+    }
+
+    const analysis = restoreAnalysis
+    restoreAppliedRef.current = true
 
     requestAnimationFrame(() => {
       if (analysis.sql) {
@@ -184,7 +202,7 @@ function ExplorarContent() {
         }
       }
     })
-  }, [analysisId, loadingDatasets, datasets])
+  }, [restoreAnalysis, loadingDatasets, datasets])
 
   async function handleExecuteQuery(sqlToExecute: string) {
     if (!selectedDataset || !sqlToExecute.trim()) return
